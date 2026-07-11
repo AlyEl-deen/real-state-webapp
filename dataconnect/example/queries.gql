@@ -1,0 +1,157 @@
+mutation CreateUser($data: User_Data!) @auth(level: USER) {
+  user_insert(data: $data)
+}
+
+mutation UpdateUser($id: UUID!, $data: User_Data!) @auth(level: USER) {
+  user_update(id: $id, data: $data)
+}
+
+mutation DeleteUser($id: UUID!) @auth(level: USER) {
+  user_delete(id: $id)
+}
+
+query GetUser($id: UUID!) @auth(level: USER) {
+  user(id: $id) {
+    name
+    email
+  }
+}
+
+query ListUsers @auth(level: USER) {
+  users {
+    name
+  }
+}
+
+mutation CreateProperty($data: Property_Data!) @auth(level: USER) {
+  property_insert(data: $data)
+}
+
+mutation UpdateProperty($id: UUID!, $data: Property_Data!) @auth(level: USER) {
+  property_update(id: $id, data: $data)
+}
+
+mutation DeleteProperty($id: UUID!) @auth(level: USER) {
+  property_delete(id: $id)
+}
+
+query GetProperty($id: UUID!) @auth(level: PUBLIC, insecureReason: "Property listings are public") {
+  property(id: $id) {
+    title
+    price
+  }
+}
+
+query ListProperties @auth(level: PUBLIC, insecureReason: "Property listings are public") {
+  properties {
+    title
+    location
+  }
+}
+
+mutation CreateMedia($data: Media_Data!) @auth(level: USER) {
+  media_insert(data: $data)
+}
+
+mutation UpdateMedia($id: UUID!, $data: Media_Data!) @auth(level: USER) {
+  media_update(id: $id, data: $data)
+}
+
+mutation DeleteMedia($id: UUID!) @auth(level: USER) {
+  media_delete(id: $id)
+}
+
+query GetMedia($id: UUID!) @auth(level: PUBLIC, insecureReason: "Property images are public") {
+  media(id: $id) {
+    url
+    caption
+  }
+}
+
+query ListMedias @auth(level: PUBLIC, insecureReason: "Property images are public") {
+  medias {
+    url
+  }
+}
+
+mutation CreateInquiry($data: Inquiry_Data!) @auth(level: USER) {
+  inquiry_insert(data: $data)
+}
+
+mutation UpdateInquiry($id: UUID!, $data: Inquiry_Data!) @auth(level: USER) {
+  inquiry_update(id: $id, data: $data)
+}
+
+mutation DeleteInquiry($id: UUID!) @auth(level: USER) {
+  inquiry_delete(id: $id)
+}
+
+query GetInquiry($id: UUID!) @auth(level: USER) {
+  inquiry(id: $id) {
+    status
+    message
+  }
+}
+
+query ListInquiries @auth(level: USER) {
+  inquiries(where: { clientId: { eq_expr: "auth.uid" } }) {
+    message
+    status
+  }
+}
+
+mutation CreateWatchlist($data: Watchlist_Data!) @auth(level: USER) {
+  watchlist_insert(data: $data)
+}
+
+mutation UpdateWatchlist($id: UUID!, $data: Watchlist_Data!) @auth(level: USER) {
+  watchlist_update(id: $id, data: $data)
+}
+
+mutation DeleteWatchlist($id: UUID!) @auth(level: USER) {
+  watchlist_delete(id: $id)
+}
+
+query GetWatchlist($id: UUID!) @auth(level: USER) {
+  watchlist(id: $id) {
+    notes
+    createdAt
+  }
+}
+
+query ListWatchlists @auth(level: USER) {
+  watchlists(where: { investorId: { eq_expr: "auth.uid" } }) {
+    notes
+    property {
+      title
+    }
+  }
+}
+
+mutation CreateAgentAssignment($data: AgentAssignment_Data!) @auth(level: USER) {
+  agentAssignment_insert(data: $data)
+}
+
+mutation UpdateAgentAssignment($id: UUID!, $data: AgentAssignment_Data!) @auth(level: USER) {
+  agentAssignment_update(id: $id, data: $data)
+}
+
+mutation DeleteAgentAssignment($id: UUID!) @auth(level: USER) {
+  agentAssignment_delete(id: $id)
+}
+
+query GetAgentAssignment($id: UUID!) @auth(level: USER) {
+  agentAssignment(id: $id) {
+    assignedDate
+    notes
+  }
+}
+
+query ListAgentAssignments @auth(level: USER) {
+  agentAssignments {
+    assignedDate
+    agent {
+      name
+    }
+  }
+}

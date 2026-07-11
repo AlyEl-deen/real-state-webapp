@@ -1,0 +1,49 @@
+type User @table {
+  name: String!
+  email: String!
+  role: String!
+  phoneNumber: String
+  bio: String
+  professionalLicenseNumber: String
+}
+
+type Property @table {
+  title: String!
+  location: String!
+  price: Float!
+  type: String!
+  description: String
+  squareFootage: Int
+  amenities: [String]
+  projectedYield: Float
+  owner: User!
+}
+
+type Media @table {
+  url: String!
+  type: String!
+  caption: String
+  property: Property!
+}
+
+type Inquiry @table {
+  status: String!
+  message: String!
+  scheduledDate: Timestamp
+  client: User!
+  property: Property!
+}
+
+type Watchlist @table {
+  createdAt: Timestamp!
+  notes: String
+  investor: User!
+  property: Property!
+}
+
+type AgentAssignment @table {
+  assignedDate: Timestamp!
+  notes: String
+  agent: User!
+  property: Property!
+}

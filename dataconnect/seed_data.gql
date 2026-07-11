@@ -1,0 +1,32 @@
+mutation CreateSeedData @transaction {
+  user_insertMany(data: [
+    { name: "Alice Agent", email: "alice@example.com", role: "Agent", id: "00000000-0000-0000-0000-000000000001" },
+    { name: "Bob Investor", email: "bob@example.com", role: "Investor", id: "00000000-0000-0000-0000-000000000002" },
+    { name: "Charlie Seller", email: "charlie@example.com", role: "Seller", id: "00000000-0000-0000-0000-000000000003" }
+  ])
+  property_insertMany(data: [
+    { title: "Sunny Villa", location: "California", price: 500000, type: "Residential", owner: { id: "00000000-0000-0000-0000-000000000003" }, id: "10000000-0000-0000-0000-000000000001" },
+    { title: "Downtown Office", location: "New York", price: 1200000, type: "Commercial", owner: { id: "00000000-0000-0000-0000-000000000003" }, id: "10000000-0000-0000-0000-000000000002" },
+    { title: "Cozy Apartment", location: "Texas", price: 250000, type: "Residential", owner: { id: "00000000-0000-0000-0000-000000000003" }, id: "10000000-0000-0000-0000-000000000003" }
+  ])
+  media_insertMany(data: [
+    { url: "img1.jpg", type: "Photo", property: { id: "10000000-0000-0000-0000-000000000001" } },
+    { url: "img2.jpg", type: "Photo", property: { id: "10000000-0000-0000-0000-000000000002" } },
+    { url: "img3.jpg", type: "Photo", property: { id: "10000000-0000-0000-0000-000000000003" } }
+  ])
+  inquiry_insertMany(data: [
+    { status: "New", message: "Interested in the villa", client: { id: "00000000-0000-0000-0000-000000000002" }, property: { id: "10000000-0000-0000-0000-000000000001" } },
+    { status: "Responded", message: "Price negotiable?", client: { id: "00000000-0000-0000-0000-000000000002" }, property: { id: "10000000-0000-0000-0000-000000000002" } },
+    { status: "Closed", message: "Thanks", client: { id: "00000000-0000-0000-0000-000000000002" }, property: { id: "10000000-0000-0000-0000-000000000003" } }
+  ])
+  watchlist_insertMany(data: [
+    { investor: { id: "00000000-0000-0000-0000-000000000002" }, property: { id: "10000000-0000-0000-0000-000000000001" }, createdAt_expr: "request.time" },
+    { investor: { id: "00000000-0000-0000-0000-000000000002" }, property: { id: "10000000-0000-0000-0000-000000000002" }, createdAt_expr: "request.time" },
+    { investor: { id: "00000000-0000-0000-0000-000000000002" }, property: { id: "10000000-0000-0000-0000-000000000003" }, createdAt_expr: "request.time" }
+  ])
+  agentAssignment_insertMany(data: [
+    { agent: { id: "00000000-0000-0000-0000-000000000001" }, property: { id: "10000000-0000-0000-0000-000000000001" }, assignedDate_expr: "request.time" },
+    { agent: { id: "00000000-0000-0000-0000-000000000001" }, property: { id: "10000000-0000-0000-0000-000000000002" }, assignedDate_expr: "request.time" },
+    { agent: { id: "00000000-0000-0000-0000-000000000001" }, property: { id: "10000000-0000-0000-0000-000000000003" }, assignedDate_expr: "request.time" }
+  ])
+}
