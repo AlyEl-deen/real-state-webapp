@@ -224,7 +224,12 @@ const translations = {
     verificationSendFailed: "Account created, but Firebase did not send the verification email:",
     existingAccountVerify: "This email already has an account. Sign in with that email and password, then resend the verification email.",
     resendVerification: "Resend Verification Email",
+    signingIn: "Signing in...",
+    signedIn: "Signed in. Opening your account...",
+    creatingAccount: "Creating your private account...",
+    accountCreated: "Account created. Verification email sent.",
     verificationResent: "Verification email sent again. Please check inbox, spam, and promotions. Firebase may delay repeated sends.",
+    verificationSentShort: "Sent - check your inbox",
     verificationResendFailed: "Could not resend the verification email.",
     verificationCopy: "We sent a verification email to",
     verifyThenSignIn: "Verify it, then sign in.",
@@ -442,7 +447,12 @@ const translations = {
     verificationSendFailed: "Konto erstellt, aber Firebase hat die Verifizierungs-E-Mail nicht gesendet:",
     existingAccountVerify: "Diese E-Mail hat bereits ein Konto. Melden Sie sich mit dieser E-Mail und dem Passwort an und senden Sie die Verifizierungs-E-Mail erneut.",
     resendVerification: "Verifizierungs-E-Mail erneut senden",
+    signingIn: "Anmeldung laeuft...",
+    signedIn: "Angemeldet. Ihr Konto wird geoeffnet...",
+    creatingAccount: "Privates Konto wird erstellt...",
+    accountCreated: "Konto erstellt. Verifizierungs-E-Mail gesendet.",
     verificationResent: "Verifizierungs-E-Mail erneut gesendet. Bitte prüfen Sie Posteingang, Spam und Werbung. Firebase kann wiederholte Sendungen verzögern.",
+    verificationSentShort: "Gesendet - Posteingang prüfen",
     verificationResendFailed: "Verifizierungs-E-Mail konnte nicht erneut gesendet werden.",
     verificationCopy: "Wir haben eine Verifizierungs-E-Mail gesendet an",
     verifyThenSignIn: "Verifizieren Sie sie und melden Sie sich dann an.",
@@ -660,7 +670,12 @@ const translations = {
     verificationSendFailed: "Account creato, ma Firebase non ha inviato l'email di verifica:",
     existingAccountVerify: "Questa email ha gia un account. Accedi con email e password, poi reinvia l'email di verifica.",
     resendVerification: "Reinvia email di verifica",
+    signingIn: "Accesso in corso...",
+    signedIn: "Accesso riuscito. Apertura account...",
+    creatingAccount: "Creazione account privato...",
+    accountCreated: "Account creato. Email di verifica inviata.",
     verificationResent: "Email di verifica inviata di nuovo. Controlla inbox, spam e promozioni. Firebase puo ritardare invii ripetuti.",
+    verificationSentShort: "Inviata - controlla la posta",
     verificationResendFailed: "Impossibile reinviare l'email di verifica.",
     verificationCopy: "Abbiamo inviato un'email di verifica a",
     verifyThenSignIn: "Verificala, poi accedi.",
@@ -1659,29 +1674,46 @@ function AuthPage({ onUser }: { onUser: (user: Profile | null) => void }) {
   const { t } = useLanguage();
   const [mode, setMode] = useState<"signin" | "signup" | "verify">("signin");
   const [message, setMessage] = useState("");
+  const [messageTone, setMessageTone] = useState<"info" | "success" | "error">("info");
   const [verificationEmail, setVerificationEmail] = useState("");
+  const [authSubmitting, setAuthSubmitting] = useState(false);
+  const [resendState, setResendState] = useState<"idle" | "sending" | "sent">("idle");
+  const settleConfirmation = () => new Promise((resolve) => window.setTimeout(resolve, 450));
 
   async function handleSignIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
+    setAuthSubmitting(true);
+    setMessageTone("info");
+    setMessage(t("signingIn"));
     try {
       const result = await signIn(String(data.get("login")), String(data.get("password")));
       onUser(await waitForAuth());
       if (result.role === "verify") {
         setVerificationEmail(result.email);
         setMode("verify");
+        setMessageTone("info");
         setMessage(t("verificationPending"));
         return;
       }
+      setMessageTone("success");
+      setMessage(t("signedIn"));
+      await settleConfirmation();
       go(result.role === "admin" ? "/admin" : "/profile");
     } catch (error) {
+      setMessageTone("error");
       setMessage(error instanceof Error ? error.message : t("signInFailed"));
+    } finally {
+      setAuthSubmitting(false);
     }
   }
 
   async function handleSignUp(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
+    setAuthSubmitting(true);
+    setMessageTone("info");
+    setMessage(t("creatingAccount"));
     try {
       const result = await signUp({
         name: String(data.get("name")),
@@ -1691,9 +1723,11 @@ function AuthPage({ onUser }: { onUser: (user: Profile | null) => void }) {
       });
       setVerificationEmail(result.email);
       setMode("verify");
-      setMessage(result.verificationSent ? t("verificationSent") : `${t("verificationSendFailed")} ${result.verificationError}`);
+      setMessageTone(result.verificationSent ? "success" : "error");
+      setMessage(result.verificationSent ? t("accountCreated") : `${t("verificationSendFailed")} ${result.verificationError}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : t("createAccountError");
+      setMessageTone("error");
       if (message.includes("already exists") || message.includes("email-already-in-use")) {
         setVerificationEmail(String(data.get("email")));
         setMode("signin");
@@ -1701,16 +1735,25 @@ function AuthPage({ onUser }: { onUser: (user: Profile | null) => void }) {
         return;
       }
       setMessage(message);
+    } finally {
+      setAuthSubmitting(false);
     }
   }
 
   async function handleResendVerification() {
+    setResendState("sending");
+    setMessageTone("info");
+    setMessage(t("sending"));
     try {
       const email = await sendCurrentUserVerificationEmail();
       setVerificationEmail(email || verificationEmail);
+      setMessageTone("success");
       setMessage(t("verificationResent"));
+      setResendState("sent");
     } catch (error) {
+      setMessageTone("error");
       setMessage(error instanceof Error ? error.message : t("verificationResendFailed"));
+      setResendState("idle");
     }
   }
 
@@ -1723,7 +1766,7 @@ function AuthPage({ onUser }: { onUser: (user: Profile | null) => void }) {
           <form className="auth-form active" onSubmit={handleSignIn}>
             <label>{t("usernameOrEmail")}<input name="login" autoComplete="username" /></label>
             <label>{t("password")}<input name="password" type="password" autoComplete="current-password" /></label>
-            <button type="submit"><Icon name="lock" />{t("enterPrivatePortal")}</button>
+            <button className="auth-primary-button" type="submit" disabled={authSubmitting}><Icon name="lock" />{authSubmitting ? t("signingIn") : t("enterPrivatePortal")}</button>
             <button className="auth-switch-link" type="button" onClick={() => setMode("signup")}><Icon name="user" />{t("dontHaveAccount")}</button>
           </form>
         )}
@@ -1733,7 +1776,7 @@ function AuthPage({ onUser }: { onUser: (user: Profile | null) => void }) {
             <label>{t("email")}<input name="email" type="email" /></label>
             <label>{t("password")}<input name="password" type="password" /></label>
             <label>{t("intent")}<select name="intent"><option value="Buy">{t("buy")}</option><option value="Rent">{t("rent")}</option><option value="Invest">{t("invest")}</option><option value="List a property">{t("listAProperty")}</option></select></label>
-            <button type="submit"><Icon name="user" />{t("createPrivateAccount")}</button>
+            <button className="auth-primary-button" type="submit" disabled={authSubmitting}><Icon name="user" />{authSubmitting ? t("creatingAccount") : t("createPrivateAccount")}</button>
             <button className="auth-switch-link" type="button" onClick={() => setMode("signin")}><Icon name="lock" />{t("alreadyHaveAccount")}</button>
           </form>
         )}
@@ -1742,11 +1785,13 @@ function AuthPage({ onUser }: { onUser: (user: Profile | null) => void }) {
             <p className="eyebrow">{t("verifyAccount")}</p>
             <h2>{t("confirmAccess")}</h2>
             <p>{t("verificationCopy")} {verificationEmail}. {t("verifyThenSignIn")}</p>
-            <button type="button" onClick={handleResendVerification}><Icon name="refresh" />{t("resendVerification")}</button>
-            <button type="button" onClick={() => setMode("signin")}><Icon name="lock" />{t("signIn")}</button>
+            <button className={`auth-primary-button ${resendState === "sent" ? "is-confirmed" : ""}`} type="button" onClick={handleResendVerification} disabled={resendState === "sending"}>
+              <Icon name={resendState === "sent" ? "check" : "refresh"} />{resendState === "sending" ? t("sending") : resendState === "sent" ? t("verificationSentShort") : t("resendVerification")}
+            </button>
+            <button className="auth-secondary-button" type="button" onClick={() => setMode("signin")}><Icon name="lock" />{t("signIn")}</button>
           </section>
         )}
-        <p className="auth-message">{message}</p>
+        <p className={`auth-message ${message ? messageTone : ""}`}>{message}</p>
       </section>
     </main>
   );

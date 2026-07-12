@@ -3,11 +3,9 @@
     "public": "dist",
     "ignore": [
       "firebase.json",
-      "firestore.rules",
       "**/.*",
       "**/node_modules/**"
     ],
-    "cleanUrls": true,
     "rewrites": [
       {
         "source": "**",
