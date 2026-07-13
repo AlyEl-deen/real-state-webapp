@@ -42,6 +42,18 @@ export type Profile = {
   isAdmin: boolean;
 };
 
+export type GeographicArea = {
+  centerLatitude: number;
+  centerLongitude: number;
+  radiusKm: number;
+  bounds: {
+    north: number;
+    south: number;
+    east: number;
+    west: number;
+  };
+};
+
 export type RentalRequest = {
   source: string;
   name?: string;
@@ -55,6 +67,7 @@ export type RentalRequest = {
   preferredDate?: string;
   channel?: string;
   preferences?: string;
+  geographicArea?: GeographicArea;
   createdAt?: string;
   status?: string;
 };
@@ -81,17 +94,7 @@ export type ExploreLead = {
   accommodationType: string;
   resultCount: number;
   excludedCommercial: true;
-  geographicArea?: {
-    centerLatitude: number;
-    centerLongitude: number;
-    radiusKm: number;
-    bounds: {
-      north: number;
-      south: number;
-      east: number;
-      west: number;
-    };
-  };
+  geographicArea?: GeographicArea;
   createdAt?: string;
   status?: string;
 };

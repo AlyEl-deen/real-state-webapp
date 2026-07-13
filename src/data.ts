@@ -1,4 +1,7 @@
 import type { Property, SiteSettings } from "./types";
+import heroVillaImage from "../assets/hero-villa.png";
+import islandVillaImage from "../assets/island-villa.png";
+import penthouseImage from "../assets/penthouse.png";
 
 export const defaultProperties: Property[] = [
   {
@@ -6,8 +9,8 @@ export const defaultProperties: Property[] = [
     name: "Villa Solenne",
     location: "French Riviera",
     destination: "riviera",
-    image: "assets/hero-villa.png",
-    images: ["assets/hero-villa.png"],
+    image: heroVillaImage,
+    images: [heroVillaImage],
     priceUsd: 18500000,
     priceLabel: "POA",
     tags: ["Beachfront", "Wellness", "Investment"],
@@ -37,8 +40,8 @@ export const defaultProperties: Property[] = [
     name: "The Obsidian Penthouse",
     location: "Dubai Skyline",
     destination: "dubai",
-    image: "assets/penthouse.png",
-    images: ["assets/penthouse.png"],
+    image: penthouseImage,
+    images: [penthouseImage],
     priceUsd: 11200000,
     priceLabel: "$11.2M",
     tags: ["Penthouse", "Investment"],
@@ -68,8 +71,8 @@ export const defaultProperties: Property[] = [
     name: "Nura Island Estate",
     location: "Maldives Private Atoll",
     destination: "maldives",
-    image: "assets/island-villa.png",
-    images: ["assets/island-villa.png"],
+    image: islandVillaImage,
+    images: [islandVillaImage],
     priceUsd: 26500000,
     priceLabel: "POA",
     tags: ["Private Island", "Beachfront", "Wellness"],

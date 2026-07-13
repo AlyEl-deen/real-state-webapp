@@ -280,7 +280,8 @@ export async function submitRentalRequest(request: RentalRequest) {
   const payload = { ...request, createdAt: new Date().toISOString(), status: "new" };
   const local = readJson<RentalRequest[]>("auraRentalRequests", []);
   writeJson("auraRentalRequests", local.concat(payload));
-  await tryFirestoreWrite(addDoc(collection(db, "rentalRequests"), payload));
+  const synced = await tryFirestoreWrite(addDoc(collection(db, "rentalRequests"), payload));
+  return { synced, payload };
 }
 
 export async function submitAdvisorRequest(request: AdvisorRequest) {

@@ -1,7 +1,10 @@
 import { createContext, FormEvent, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import * as L from "leaflet";
-import type { AdvisorRequest, ManagedRequest, Profile, Property, SiteSettings } from "./types";
+import type { AdvisorRequest, GeographicArea, ManagedRequest, Profile, Property, SiteSettings } from "./types";
 import { defaultProperties, defaultSiteSettings, rates } from "./data";
+import heroVillaImage from "../assets/hero-villa.png";
+import islandVillaImage from "../assets/island-villa.png";
+import penthouseImage from "../assets/penthouse.png";
 import {
   deleteProperty,
   deleteManagedRequest,
@@ -166,6 +169,13 @@ const translations = {
     chooseMapArea: "Choose preferred area",
     chooseMapAreaHint: "Click the map to place the center, then drag the gold edge handle to resize the range.",
     selectedArea: "Selected area",
+    selectedRangeReady: "Your preferred area is ready",
+    selectedRangeCopy: "This exact center, radius, and boundary will be attached to your request.",
+    centerPoint: "Center point",
+    rangeRadius: "Range radius",
+    boundaryBox: "Boundary",
+    sendSelectedRange: "Send selected area",
+    signInToSendRange: "Sign in to send this area",
     searchMapDetail: "Refresh matching residences",
     sendRequestDetail: "Send area and filters to our team",
     profile: "Profile",
@@ -228,6 +238,10 @@ const translations = {
     compare: "Compare",
     privateViewing: "Private Viewing",
     privateMap: "Private Map",
+    investmentSnapshot: "Investment Snapshot",
+    decisionBrief: "Live decision brief",
+    selectResidence: "Select a residence",
+    noMatchingResidences: "No residences match the current filters.",
     assets: "assets",
     openExplanation: "Open Explanation",
     illustratedDrawingsGuide: "Illustrated Drawings + Unit Guide",
@@ -352,6 +366,10 @@ const translations = {
     saveProfile: "Save Profile",
     savingProfile: "Saving profile...",
     profileSaved: "Profile saved.",
+    saveProfileConfirmation: "Save these profile details and apply the selected profile image to your account?",
+    confirmProfileSave: "Yes, Save Profile",
+    logOutConfirmation: "Sign out of this account and return to public access?",
+    confirmLogOut: "Yes, Log Out",
     profileSaveFailed: "Could not save profile.",
     logOut: "Log Out",
     controlRoom: "control room.",
@@ -471,6 +489,13 @@ const translations = {
     chooseMapArea: "Wunschgebiet auswaehlen",
     chooseMapAreaHint: "Klicken Sie fuer den Mittelpunkt auf die Karte und ziehen Sie den goldenen Randgriff, um den Radius zu aendern.",
     selectedArea: "Ausgewaehltes Gebiet",
+    selectedRangeReady: "Ihr Wunschgebiet ist bereit",
+    selectedRangeCopy: "Dieser Mittelpunkt, Radius und diese Begrenzung werden exakt an Ihre Anfrage angehaengt.",
+    centerPoint: "Mittelpunkt",
+    rangeRadius: "Suchradius",
+    boundaryBox: "Begrenzung",
+    sendSelectedRange: "Ausgewaehltes Gebiet senden",
+    signInToSendRange: "Zum Senden dieses Gebiets anmelden",
     searchMapDetail: "Passende Residenzen aktualisieren",
     sendRequestDetail: "Gebiet und Filter an unser Team senden",
     profile: "Profil",
@@ -533,6 +558,10 @@ const translations = {
     compare: "Vergleichen",
     privateViewing: "Private Besichtigung",
     privateMap: "Private Karte",
+    investmentSnapshot: "Investitionsübersicht",
+    decisionBrief: "Aktuelle Entscheidungsübersicht",
+    selectResidence: "Residenz auswählen",
+    noMatchingResidences: "Keine Residenzen entsprechen den aktuellen Filtern.",
     assets: "Objekte",
     openExplanation: "Erklärung öffnen",
     illustratedDrawingsGuide: "Illustrationen + Einheitenleitfaden",
@@ -657,6 +686,10 @@ const translations = {
     saveProfile: "Profil speichern",
     savingProfile: "Profil wird gespeichert...",
     profileSaved: "Profil gespeichert.",
+    saveProfileConfirmation: "Diese Profildaten speichern und das ausgewählte Profilbild auf Ihr Konto anwenden?",
+    confirmProfileSave: "Ja, Profil speichern",
+    logOutConfirmation: "Von diesem Konto abmelden und zum öffentlichen Zugang zurückkehren?",
+    confirmLogOut: "Ja, abmelden",
     profileSaveFailed: "Profil konnte nicht gespeichert werden.",
     logOut: "Abmelden",
     controlRoom: "Kontrollraum.",
@@ -776,6 +809,13 @@ const translations = {
     chooseMapArea: "Scegli l'area preferita",
     chooseMapAreaHint: "Fai clic per impostare il centro, poi trascina la maniglia dorata sul bordo per ridimensionare il raggio.",
     selectedArea: "Area selezionata",
+    selectedRangeReady: "La tua area preferita e pronta",
+    selectedRangeCopy: "Centro, raggio e confini esatti saranno allegati alla richiesta.",
+    centerPoint: "Punto centrale",
+    rangeRadius: "Raggio",
+    boundaryBox: "Confini",
+    sendSelectedRange: "Invia area selezionata",
+    signInToSendRange: "Accedi per inviare quest'area",
     searchMapDetail: "Aggiorna le residenze corrispondenti",
     sendRequestDetail: "Invia area e filtri al nostro team",
     profile: "Profilo",
@@ -838,6 +878,10 @@ const translations = {
     compare: "Confronta",
     privateViewing: "Visita privata",
     privateMap: "Mappa privata",
+    investmentSnapshot: "Panoramica investimento",
+    decisionBrief: "Sintesi decisionale aggiornata",
+    selectResidence: "Seleziona una residenza",
+    noMatchingResidences: "Nessuna residenza corrisponde ai filtri attuali.",
     assets: "asset",
     openExplanation: "Apri spiegazione",
     illustratedDrawingsGuide: "Illustrazioni + guida dell'unita",
@@ -962,6 +1006,10 @@ const translations = {
     saveProfile: "Salva profilo",
     savingProfile: "Salvataggio profilo...",
     profileSaved: "Profilo salvato.",
+    saveProfileConfirmation: "Salvare questi dati e applicare l'immagine profilo selezionata al tuo account?",
+    confirmProfileSave: "Sì, salva profilo",
+    logOutConfirmation: "Uscire da questo account e tornare all'accesso pubblico?",
+    confirmLogOut: "Sì, esci",
     profileSaveFailed: "Impossibile salvare il profilo.",
     logOut: "Esci",
     controlRoom: "control room.",
@@ -1146,22 +1194,22 @@ const areaCenters: Record<string, { lat: number; lng: number }> = {
 const commercialBlockList = ["hotel", "resort", "hostel", "motel", "inn", "lodge", "casino", "marriott", "hilton", "steigenberger", "rixos", "jazz", "jaz ", "sentido", "steigen", "club"];
 
 const curatedHurghadaRentals: MapRental[] = [
-  { id: "gouna-lagoon-studio", title: "Lagoon View Studio Residence", address: "Abu Tig Marina Extension, El Gouna, Hurghada", area: "El Gouna", category: "studio", image: "assets/hero-villa.png", summary: "Compact marina-side studio suitable for short stays and owner-managed rental checks.", lat: 27.4026, lng: 33.6785, bedrooms: 1, priceLabel: "Monthly ready", source: "curated" },
-  { id: "gouna-marina-apartment", title: "Marina One Bedroom Apartment", address: "New Marina Walk, El Gouna, Hurghada", area: "El Gouna", category: "apartment", image: "assets/penthouse.png", summary: "Independent one-bedroom apartment near the marina promenade, not a hotel inventory unit.", lat: 27.4098, lng: 33.6741, bedrooms: 1, priceLabel: "Short stay / monthly", source: "curated" },
-  { id: "gouna-west-compound", title: "West Golf Compound Residence", address: "West Golf Residential Cluster, El Gouna, Hurghada", area: "El Gouna", category: "compound", image: "assets/island-villa.png", summary: "Compound residence with private owner rental potential and advisor review required.", lat: 27.3908, lng: 33.6657, bedrooms: 2, priceLabel: "Owner managed", source: "curated" },
+  { id: "gouna-lagoon-studio", title: "Lagoon View Studio Residence", address: "Abu Tig Marina Extension, El Gouna, Hurghada", area: "El Gouna", category: "studio", image: heroVillaImage, summary: "Compact marina-side studio suitable for short stays and owner-managed rental checks.", lat: 27.4026, lng: 33.6785, bedrooms: 1, priceLabel: "Monthly ready", source: "curated" },
+  { id: "gouna-marina-apartment", title: "Marina One Bedroom Apartment", address: "New Marina Walk, El Gouna, Hurghada", area: "El Gouna", category: "apartment", image: penthouseImage, summary: "Independent one-bedroom apartment near the marina promenade, not a hotel inventory unit.", lat: 27.4098, lng: 33.6741, bedrooms: 1, priceLabel: "Short stay / monthly", source: "curated" },
+  { id: "gouna-west-compound", title: "West Golf Compound Residence", address: "West Golf Residential Cluster, El Gouna, Hurghada", area: "El Gouna", category: "compound", image: islandVillaImage, summary: "Compound residence with private owner rental potential and advisor review required.", lat: 27.3908, lng: 33.6657, bedrooms: 2, priceLabel: "Owner managed", source: "curated" },
   { id: "gouna-monthly-townhome", title: "Downtown Monthly Town Apartment", address: "Downtown El Gouna Residential Lane, Hurghada", area: "El Gouna", category: "monthly", image: "assets/desert-villa.png", summary: "Monthly rental candidate in a residential lane for longer stays and relocation clients.", lat: 27.3951, lng: 33.6779, bedrooms: 2, priceLabel: "Monthly lease", source: "curated" },
-  { id: "sahl-hasheesh-compound", title: "Bayfront Compound Apartment", address: "Old Town Promenade, Sahl Hasheesh, Hurghada", area: "Sahl Hasheesh", category: "compound", image: "assets/island-villa.png", summary: "Residential compound apartment near the promenade, screened away from resort inventory.", lat: 27.0499, lng: 33.8911, bedrooms: 2, priceLabel: "Managed rental", source: "curated" },
+  { id: "sahl-hasheesh-compound", title: "Bayfront Compound Apartment", address: "Old Town Promenade, Sahl Hasheesh, Hurghada", area: "Sahl Hasheesh", category: "compound", image: islandVillaImage, summary: "Residential compound apartment near the promenade, screened away from resort inventory.", lat: 27.0499, lng: 33.8911, bedrooms: 2, priceLabel: "Managed rental", source: "curated" },
   { id: "sahl-hasheesh-monthly", title: "Palm Residence Monthly Rental", address: "Palm Beach Road Residential Strip, Sahl Hasheesh, Hurghada", area: "Sahl Hasheesh", category: "monthly", image: "assets/desert-villa.png", summary: "Longer-stay residential rental candidate with owner negotiation required.", lat: 27.0576, lng: 33.8828, bedrooms: 2, priceLabel: "Monthly lease", source: "curated" },
-  { id: "sahl-hasheesh-studio", title: "Old Town Studio Suite", address: "Old Town Residential Court, Sahl Hasheesh, Hurghada", area: "Sahl Hasheesh", category: "studio", image: "assets/hero-villa.png", summary: "Small independent studio-style unit for individual travelers and remote-work stays.", lat: 27.0522, lng: 33.8892, bedrooms: 1, priceLabel: "Flexible rental", source: "curated" },
-  { id: "sahl-hasheesh-apartment", title: "Veranda District Two Bedroom", address: "Veranda Residential District, Sahl Hasheesh, Hurghada", area: "Sahl Hasheesh", category: "apartment", image: "assets/penthouse.png", summary: "Two-bedroom apartment candidate in a residential district, suitable for advisor follow-up.", lat: 27.0612, lng: 33.8784, bedrooms: 2, priceLabel: "Advisor pricing", source: "curated" },
-  { id: "ahyaa-studio", title: "North Coast Studio Unit", address: "Al Ahyaa Coastal Road, Hurghada", area: "Al Ahyaa", category: "studio", image: "assets/hero-villa.png", summary: "Independent studio on the northern coastal road with flexible rental potential.", lat: 27.3132, lng: 33.7395, bedrooms: 1, priceLabel: "Flexible rental", source: "curated" },
+  { id: "sahl-hasheesh-studio", title: "Old Town Studio Suite", address: "Old Town Residential Court, Sahl Hasheesh, Hurghada", area: "Sahl Hasheesh", category: "studio", image: heroVillaImage, summary: "Small independent studio-style unit for individual travelers and remote-work stays.", lat: 27.0522, lng: 33.8892, bedrooms: 1, priceLabel: "Flexible rental", source: "curated" },
+  { id: "sahl-hasheesh-apartment", title: "Veranda District Two Bedroom", address: "Veranda Residential District, Sahl Hasheesh, Hurghada", area: "Sahl Hasheesh", category: "apartment", image: penthouseImage, summary: "Two-bedroom apartment candidate in a residential district, suitable for advisor follow-up.", lat: 27.0612, lng: 33.8784, bedrooms: 2, priceLabel: "Advisor pricing", source: "curated" },
+  { id: "ahyaa-studio", title: "North Coast Studio Unit", address: "Al Ahyaa Coastal Road, Hurghada", area: "Al Ahyaa", category: "studio", image: heroVillaImage, summary: "Independent studio on the northern coastal road with flexible rental potential.", lat: 27.3132, lng: 33.7395, bedrooms: 1, priceLabel: "Flexible rental", source: "curated" },
   { id: "ahyaa-monthly", title: "Al Ahyaa Monthly Flat", address: "Al Ahyaa Residential Block, Hurghada", area: "Al Ahyaa", category: "monthly", image: "assets/desert-villa.png", summary: "Simple monthly residential flat for budget-conscious long stays.", lat: 27.3007, lng: 33.7465, bedrooms: 1, priceLabel: "Monthly option", source: "curated" },
-  { id: "kawther-apartment", title: "El Kawther City Apartment", address: "El Kawther District, Hurghada", area: "El Kawther", category: "apartment", image: "assets/penthouse.png", summary: "City apartment close to daily services, best handled by direct owner negotiation.", lat: 27.1913, lng: 33.8268, bedrooms: 2, priceLabel: "City rental", source: "curated" },
-  { id: "kawther-studio", title: "El Kawther Compact Studio", address: "El Kawther Residential Street, Hurghada", area: "El Kawther", category: "studio", image: "assets/hero-villa.png", summary: "Compact private studio in a residential zone, not hotel-operated.", lat: 27.1957, lng: 33.8214, bedrooms: 1, priceLabel: "Flexible rental", source: "curated" },
+  { id: "kawther-apartment", title: "El Kawther City Apartment", address: "El Kawther District, Hurghada", area: "El Kawther", category: "apartment", image: penthouseImage, summary: "City apartment close to daily services, best handled by direct owner negotiation.", lat: 27.1913, lng: 33.8268, bedrooms: 2, priceLabel: "City rental", source: "curated" },
+  { id: "kawther-studio", title: "El Kawther Compact Studio", address: "El Kawther Residential Street, Hurghada", area: "El Kawther", category: "studio", image: heroVillaImage, summary: "Compact private studio in a residential zone, not hotel-operated.", lat: 27.1957, lng: 33.8214, bedrooms: 1, priceLabel: "Flexible rental", source: "curated" },
   { id: "mubarak-six-compound", title: "Mubarak 6 Garden Compound Home", address: "Mubarak 6, Hurghada", area: "Mubarak 6", category: "compound", image: "assets/desert-villa.png", summary: "Family-sized compound home for private rental management or purchase inquiry.", lat: 27.2258, lng: 33.8038, bedrooms: 3, priceLabel: "Family ready", source: "curated" },
-  { id: "mubarak-six-apartment", title: "Mubarak 6 Residential Apartment", address: "Mubarak 6 Residential Zone, Hurghada", area: "Mubarak 6", category: "apartment", image: "assets/penthouse.png", summary: "Residential apartment with owner-side negotiation and advisory follow-up.", lat: 27.2301, lng: 33.8076, bedrooms: 2, priceLabel: "Advisor pricing", source: "curated" },
-  { id: "sheraton-monthly", title: "Sheraton Road Private Apartment", address: "Sheraton Road Residential Block, Hurghada", area: "Sheraton Road", category: "monthly", image: "assets/penthouse.png", summary: "Monthly private apartment close to central services and marina access.", lat: 27.2176, lng: 33.8382, bedrooms: 2, priceLabel: "Monthly option", source: "curated" },
-  { id: "sheraton-studio", title: "Sheraton Road Studio Flat", address: "Sheraton Road Side Street, Hurghada", area: "Sheraton Road", category: "studio", image: "assets/hero-villa.png", summary: "Private studio flat in the central corridor, suitable for quick advisor screening.", lat: 27.2204, lng: 33.8349, bedrooms: 1, priceLabel: "Short stay", source: "curated" },
+  { id: "mubarak-six-apartment", title: "Mubarak 6 Residential Apartment", address: "Mubarak 6 Residential Zone, Hurghada", area: "Mubarak 6", category: "apartment", image: penthouseImage, summary: "Residential apartment with owner-side negotiation and advisory follow-up.", lat: 27.2301, lng: 33.8076, bedrooms: 2, priceLabel: "Advisor pricing", source: "curated" },
+  { id: "sheraton-monthly", title: "Sheraton Road Private Apartment", address: "Sheraton Road Residential Block, Hurghada", area: "Sheraton Road", category: "monthly", image: penthouseImage, summary: "Monthly private apartment close to central services and marina access.", lat: 27.2176, lng: 33.8382, bedrooms: 2, priceLabel: "Monthly option", source: "curated" },
+  { id: "sheraton-studio", title: "Sheraton Road Studio Flat", address: "Sheraton Road Side Street, Hurghada", area: "Sheraton Road", category: "studio", image: heroVillaImage, summary: "Private studio flat in the central corridor, suitable for quick advisor screening.", lat: 27.2204, lng: 33.8349, bedrooms: 1, priceLabel: "Short stay", source: "curated" },
 ];
 
 const isCommercialAccommodation = (rental: MapRental) => {
@@ -1237,7 +1285,7 @@ const normalizeProxyRentals = (items: Partial<MapRental>[] = []): MapRental[] =>
       address: item.address || "Hurghada",
       area: item.area || "Hurghada",
       category: item.category || "apartment",
-      image: item.image || (item.category === "studio" ? "assets/hero-villa.png" : item.category === "compound" ? "assets/island-villa.png" : "assets/penthouse.png"),
+      image: item.image || (item.category === "studio" ? heroVillaImage : item.category === "compound" ? islandVillaImage : penthouseImage),
       summary: item.summary || "Live map result screened for independent residential rental review.",
       durations: item.durations || defaultDurationsFor({ category: item.category || "apartment", priceLabel: item.priceLabel || "Advisor pricing" }),
       lat: item.lat || 27.2579,
@@ -1461,17 +1509,20 @@ function Header({
   user,
   settings,
   activePage,
+  activeRouteId,
   onNavigate,
   onContact,
 }: {
   user: Profile | null;
   settings: SiteSettings;
   activePage: Page;
+  activeRouteId: string;
   onNavigate: (section: string) => void;
   onContact: () => void;
 }) {
   const { t } = useLanguage();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState(activePage === "home" ? "home" : "");
   const headerRef = useDismissOnOutside<HTMLElement>(mobileMenuOpen, () => setMobileMenuOpen(false));
   useEffect(() => {
     if (!mobileMenuOpen) return;
@@ -1481,29 +1532,53 @@ function Header({
       document.body.style.overflow = previousOverflow;
     };
   }, [mobileMenuOpen]);
+  useEffect(() => {
+    if (activePage !== "home") {
+      setActiveSection("");
+      return;
+    }
+    const sections = ["home", "collections", "residences", "concierge"];
+    const updateActiveSection = () => {
+      const marker = window.scrollY + 150;
+      let current = "home";
+      sections.forEach((section) => {
+        const element = document.getElementById(section);
+        if (element && element.offsetTop <= marker) current = section;
+      });
+      setActiveSection(current);
+    };
+    updateActiveSection();
+    window.addEventListener("scroll", updateActiveSection, { passive: true });
+    return () => window.removeEventListener("scroll", updateActiveSection);
+  }, [activePage]);
+  const navigateDesktop = (section: string) => {
+    setActiveSection(section);
+    onNavigate(section);
+  };
   const navigateMobile = (section: string) => {
     setMobileMenuOpen(false);
+    setActiveSection(section);
     onNavigate(section);
   };
 
   return (
     <header ref={headerRef} className="site-header scrolled">
-      <button className="brand brand-button" type="button" onClick={() => onNavigate("home")}>
+      <button className="brand brand-button" type="button" aria-current={activePage === "home" && activeSection === "home" ? "page" : undefined} onClick={() => navigateDesktop("home")}>
         <span className="brand-mark">A</span>
         <span>{settings.brandName}</span>
       </button>
       <nav className="desktop-nav" aria-label={t("primaryNavigation")}>
-        <button type="button" onClick={() => onNavigate("residences")}><Icon name="building" />{t("residences")}</button>
-        <button type="button" onClick={() => onNavigate("collections")}><Icon name="layers" />{t("collections")}</button>
+        <button type="button" aria-current={activePage === "home" && activeSection === "residences" ? "location" : undefined} onClick={() => navigateDesktop("residences")}><Icon name="building" />{t("residences")}</button>
+        <button type="button" aria-current={activePage === "home" && activeSection === "collections" ? "location" : undefined} onClick={() => navigateDesktop("collections")}><Icon name="layers" />{t("collections")}</button>
         <a href="#/explore-map" aria-current={activePage === "explore-map" ? "page" : undefined}><Icon name="map" />{t("exploreMap")}</a>
-        <a href="#/about" aria-current={activePage === "about" ? "page" : undefined}><Icon name="globe" />{t("about")}</a>
-        <button type="button" onClick={() => onNavigate("concierge")}><Icon name="message" />{t("concierge")}</button>
+        <a href="#/about" aria-current={activePage === "about" && activeRouteId !== "contact" ? "page" : undefined}><Icon name="globe" />{t("about")}</a>
+        <button type="button" aria-current={activePage === "home" && activeSection === "concierge" ? "location" : undefined} onClick={() => navigateDesktop("concierge")}><Icon name="message" />{t("concierge")}</button>
         {!user && <a href="#/auth" aria-current={activePage === "auth" ? "page" : undefined}><Icon name="lock" />{t("signIn")}</a>}
         {isAdmin(user) && <a className="admin-nav-link" href="#/admin" aria-current={activePage === "admin" || activePage === "admin-unit" ? "page" : undefined}><Icon name="settings" />{t("admin")}</a>}
       </nav>
       <div className="header-actions">
         <LanguageSwitcher />
-        <button className="advisor-button" type="button" onClick={onContact}>
+        <button className="advisor-button" type="button" aria-current={activePage === "about" && activeRouteId === "contact" ? "page" : undefined} onClick={onContact}>
           <Icon name="message" />{t("contact")}
         </button>
         {user && (
@@ -1531,14 +1606,14 @@ function Header({
       </div>
       <nav className={`mobile-menu ${mobileMenuOpen ? "open" : ""}`} aria-label={t("mobileNavigation")}>
         <LanguageSwitcher compact />
-        <button type="button" onClick={() => navigateMobile("residences")}><Icon name="building" />{t("residences")}</button>
-        <button type="button" onClick={() => navigateMobile("collections")}><Icon name="layers" />{t("collections")}</button>
+        <button type="button" aria-current={activePage === "home" && activeSection === "residences" ? "location" : undefined} onClick={() => navigateMobile("residences")}><Icon name="building" />{t("residences")}</button>
+        <button type="button" aria-current={activePage === "home" && activeSection === "collections" ? "location" : undefined} onClick={() => navigateMobile("collections")}><Icon name="layers" />{t("collections")}</button>
         <a href="#/explore-map" aria-current={activePage === "explore-map" ? "page" : undefined} onClick={() => setMobileMenuOpen(false)}><Icon name="map" />{t("exploreMap")}</a>
-        <a href="#/about" aria-current={activePage === "about" ? "page" : undefined} onClick={() => setMobileMenuOpen(false)}><Icon name="globe" />{t("about")}</a>
-        <button type="button" onClick={() => navigateMobile("concierge")}><Icon name="message" />{t("concierge")}</button>
+        <a href="#/about" aria-current={activePage === "about" && activeRouteId !== "contact" ? "page" : undefined} onClick={() => setMobileMenuOpen(false)}><Icon name="globe" />{t("about")}</a>
+        <button type="button" aria-current={activePage === "home" && activeSection === "concierge" ? "location" : undefined} onClick={() => navigateMobile("concierge")}><Icon name="message" />{t("concierge")}</button>
         {!user && <a href="#/auth" aria-current={activePage === "auth" ? "page" : undefined} onClick={() => setMobileMenuOpen(false)}><Icon name="lock" />{t("signIn")}</a>}
         {isAdmin(user) && <a className="admin-nav-link" href="#/admin" aria-current={activePage === "admin" || activePage === "admin-unit" ? "page" : undefined} onClick={() => setMobileMenuOpen(false)}><Icon name="settings" />{t("admin")}</a>}
-        <button type="button" onClick={() => { setMobileMenuOpen(false); onContact(); }}><Icon name="message" />{t("contact")}</button>
+        <button type="button" aria-current={activePage === "about" && activeRouteId === "contact" ? "page" : undefined} onClick={() => { setMobileMenuOpen(false); onContact(); }}><Icon name="message" />{t("contact")}</button>
       </nav>
     </header>
   );
@@ -1589,7 +1664,7 @@ function HomePage({
   const [lifestyle, setLifestyle] = useState("all");
   const [privacy, setPrivacy] = useState("all");
   const [currency, setCurrency] = useState<keyof typeof rates>(settings.defaultCurrency);
-  const [activeMap, setActiveMap] = useState(0);
+  const [activeSnapshot, setActiveSnapshot] = useState(0);
   const [curated, setCurated] = useState(false);
   const [comparison, setComparison] = useState<number[]>([]);
   const [bookingMessage, setBookingMessage] = useState("");
@@ -1681,12 +1756,13 @@ function HomePage({
       current.includes(index) ? current.filter((item) => item !== index) : current.length < 3 ? current.concat(index) : current
     );
   };
+  const snapshotProperty = visible.includes(properties[activeSnapshot]) ? properties[activeSnapshot] : visible[0];
 
   return (
     <main>
       <section className="hero" id="home">
         <picture>
-          <img src="assets/hero-villa.png" alt="Coastal luxury villa at golden hour" />
+          <img src={heroVillaImage} alt="Coastal luxury villa at golden hour" />
         </picture>
         <div className="hero-overlay" />
         <div className="hero-content reveal visible">
@@ -1854,45 +1930,43 @@ function HomePage({
             })}
           </div>
 
-          <aside className="map-panel reveal visible">
-            <div className="map-toolbar">
-              <span><Icon name="map" />{t("privateMap")}</span>
-              <span><Icon name="building" />{visible.length} {t("assets")}</span>
-            </div>
-            <div className="map-canvas">
-              {properties.map((property, index) => (
-                <button
-                  className={`map-pin ${activeMap === index ? "active" : ""}`}
-                  style={{ left: property.coordinates.left, top: property.coordinates.top }}
-                  type="button"
-                  key={property.slug}
-                  onClick={() => {
-                    if (!requireAccess()) return;
-                    setActiveMap(index);
-                  }}
-                  aria-label={`View ${property.name}`}
-                />
-              ))}
-              <div className="map-route" />
-            </div>
-            {properties[activeMap] && (
-              <div className="map-property">
-                <img src={properties[activeMap].image} alt={properties[activeMap].name} />
-                <div>
-                  <span>{properties[activeMap].location}</span>
-                  <h3>{properties[activeMap].name}</h3>
-                  <p>{properties[activeMap].specs}</p>
-                  <button type="button" onClick={() => openDetail(properties[activeMap].slug)}><Icon name="external" />{t("openExplanation")}</button>
+          <aside className="investment-snapshot-panel reveal visible">
+            <header className="investment-snapshot-header">
+              <div><span><Icon name="wallet" />{t("investmentSnapshot")}</span><small>{t("decisionBrief")}</small></div>
+              <strong>{visible.length} {t("assets")}</strong>
+            </header>
+            {snapshotProperty ? (
+              <>
+                <div className="investment-snapshot-selector" aria-label={t("selectResidence")}>
+                  {visible.slice(0, 4).map((property) => {
+                    const index = properties.indexOf(property);
+                    return <button className={property.slug === snapshotProperty.slug ? "active" : ""} type="button" key={property.slug} onClick={() => setActiveSnapshot(index)}>{property.name}</button>;
+                  })}
                 </div>
-              </div>
-            )}
+                <div className="investment-snapshot-visual">
+                  <img src={snapshotProperty.image} alt={snapshotProperty.name} />
+                  <div><span><Icon name="map" />{snapshotProperty.location}</span><h3>{snapshotProperty.name}</h3><p>{formatPrice(snapshotProperty)}</p></div>
+                </div>
+                <dl className="investment-snapshot-metrics">
+                  <div><dt><Icon name="shield" />{t("privacy")}</dt><dd>{snapshotProperty.privacy}</dd></div>
+                  <div><dt><Icon name="wallet" />{t("yield")}</dt><dd>{snapshotProperty.yield || "—"}</dd></div>
+                  <div><dt><Icon name="calendar" />{t("occupancy")}</dt><dd>{snapshotProperty.occupancy || "—"}</dd></div>
+                  <div><dt><Icon name="key" />{t("payment")}</dt><dd>{snapshotProperty.payment || "—"}</dd></div>
+                </dl>
+                <div className="investment-snapshot-actions">
+                  <button type="button" onClick={() => toggleCompare(properties.indexOf(snapshotProperty))}><Icon name="compare" />{comparison.includes(properties.indexOf(snapshotProperty)) ? t("inComparison") : t("compare")}</button>
+                  <button type="button" onClick={() => openDetail(snapshotProperty.slug)}><Icon name="eye" />{t("viewExplanation")}</button>
+                  <button type="button" onClick={openMapSearch}><Icon name="map" />{t("openMapSearch")}</button>
+                </div>
+              </>
+            ) : <p className="investment-snapshot-empty">{t("noMatchingResidences")}</p>}
           </aside>
         </div>
       </section>
 
       <section className="detail section" id="explanation">
         <div className="detail-media reveal visible">
-          <img src="assets/island-villa.png" alt="Private island villa with yacht dock" />
+          <img src={islandVillaImage} alt="Private island villa with yacht dock" />
           <button type="button" className="media-pill"><Icon name="image" />{t("illustratedDrawingsGuide")}</button>
         </div>
         <div className="detail-copy reveal visible">
@@ -2207,6 +2281,10 @@ function ExploreMapPanel({
   radiusKm,
   onAreaCenterChange,
   onRadiusChange,
+  geographicArea,
+  canSendRange,
+  sendingRange,
+  onSendRange,
 }: {
   rentals: MapRental[];
   activeId: string;
@@ -2215,6 +2293,10 @@ function ExploreMapPanel({
   radiusKm: number;
   onAreaCenterChange: (center: MapAreaCenter) => void;
   onRadiusChange: (radiusKm: number) => void;
+  geographicArea: GeographicArea;
+  canSendRange: boolean;
+  sendingRange: boolean;
+  onSendRange: () => void;
 }) {
   const { t } = useLanguage();
   const leafletNode = useRef<HTMLDivElement | null>(null);
@@ -2367,6 +2449,22 @@ function ExploreMapPanel({
           </article>
         )}
       </div>
+      <section className="explore-range-receipt" aria-live="polite">
+        <div className="explore-range-receipt-copy">
+          <span className="explore-range-status"><Icon name="check" />{t("selectedRangeReady")}</span>
+          <strong>{t("selectedRangeCopy")}</strong>
+        </div>
+        <dl>
+          <div><dt>{t("centerPoint")}</dt><dd>{geographicArea.centerLatitude.toFixed(4)}, {geographicArea.centerLongitude.toFixed(4)}</dd></div>
+          <div><dt>{t("rangeRadius")}</dt><dd>{geographicArea.radiusKm} km</dd></div>
+          <div><dt>{t("boundaryBox")}</dt><dd>N {geographicArea.bounds.north.toFixed(3)} · S {geographicArea.bounds.south.toFixed(3)} · E {geographicArea.bounds.east.toFixed(3)} · W {geographicArea.bounds.west.toFixed(3)}</dd></div>
+        </dl>
+        <button className="explore-range-send-button" type="button" onClick={onSendRange} disabled={sendingRange}>
+          <Icon name={canSendRange ? "message" : "lock"} />
+          <span>{canSendRange ? t("sendSelectedRange") : t("signInToSendRange")}</span>
+          <Icon name="arrowRight" />
+        </button>
+      </section>
     </section>
   );
 }
@@ -2380,6 +2478,8 @@ function ExploreMapPage({ user, routeQuery, onConfirmRequest }: { user: Profile 
   const initialCategory = (initialParams.get("type") || "all") as AccommodationType;
   const initialDuration = (initialParams.get("duration") || "any") as DurationType;
   const initialRange = Number(initialParams.get("range")) || 35;
+  const initialLatitude = initialParams.get("lat");
+  const initialLongitude = initialParams.get("lng");
   const initialRentals = useMemo(
     () => filterIndependentRentals(curatedHurghadaRentals, initialArea, initialCategory, initialDuration, initialRange, initialCountry, initialCity),
     [initialArea, initialCategory, initialDuration, initialRange, initialCountry, initialCity]
@@ -2393,11 +2493,15 @@ function ExploreMapPage({ user, routeQuery, onConfirmRequest }: { user: Profile 
   const [rentals, setRentals] = useState<MapRental[]>(initialRentals);
   const [activeId, setActiveId] = useState(() => initialRentals[0]?.id || "");
   const [mapAreaCenter, setMapAreaCenter] = useState<MapAreaCenter>(() => {
+    const latitude = initialLatitude === null ? Number.NaN : Number(initialLatitude);
+    const longitude = initialLongitude === null ? Number.NaN : Number(initialLongitude);
+    if (Number.isFinite(latitude) && Number.isFinite(longitude)) return { lat: latitude, lng: longitude };
     const firstRental = initialRentals[0];
     return firstRental ? { lat: firstRental.lat, lng: firstRental.lng } : { lat: 27.2579, lng: 33.8116 };
   });
   const [searched, setSearched] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [sendingRange, setSendingRange] = useState(false);
   const [message, setMessage] = useState("");
   const [messageTone, setMessageTone] = useState<"info" | "success" | "error">("info");
 
@@ -2472,9 +2576,25 @@ function ExploreMapPage({ user, routeQuery, onConfirmRequest }: { user: Profile 
   }
 
   async function sendSearchRequest() {
-    if (!(await onConfirmRequest({ eyebrow: t("confirmRequest"), title: `${country} · ${city}`, description: t("confirmationCopy"), confirmLabel: t("sendRequest"), icon: "map" }))) return;
+    if (!user) {
+      const params = new URLSearchParams({
+        country,
+        city,
+        area,
+        type: category,
+        duration,
+        range: String(radiusKm),
+        lat: String(geographicArea.centerLatitude),
+        lng: String(geographicArea.centerLongitude),
+      });
+      sessionStorage.setItem("auraAuthReturn", `/explore-map?${params.toString()}`);
+      go("/auth");
+      return;
+    }
+    if (!(await onConfirmRequest({ eyebrow: t("confirmRequest"), title: `${country} · ${city} · ${radiusKm} km`, description: t("selectedRangeCopy"), confirmLabel: t("sendSelectedRange"), icon: "map" }))) return;
+    setSendingRange(true);
     try {
-      await submitRentalRequest({
+      const result = await submitRentalRequest({
         source: "explore-map-filter-search",
         name: user?.name || "",
         email: user?.email || "",
@@ -2482,12 +2602,16 @@ function ExploreMapPage({ user, routeQuery, onConfirmRequest }: { user: Profile 
         desiredResidence: `${country} / ${city}${area ? ` / ${area}` : ""}`,
         request: `Country: ${country}. City: ${city}. Area: ${area || "Any"}. Selected map center: ${geographicArea.centerLatitude}, ${geographicArea.centerLongitude}. Radius: ${geographicArea.radiusKm}km. Bounds: N ${geographicArea.bounds.north}, S ${geographicArea.bounds.south}, E ${geographicArea.bounds.east}, W ${geographicArea.bounds.west}. Unit type: ${category}. Duration: ${duration}.`,
         preferences: "Client selected this geographical living area directly on the interactive map. Independent residential/touristic units only; hotels and resorts excluded.",
+        geographicArea,
       });
+      if (!result.synced) throw new Error("The request could not reach the advisory inbox. Please try again.");
       setMessageTone("success");
       setMessage(t("searchRequestSent"));
     } catch (error) {
       setMessageTone("error");
       setMessage(error instanceof Error ? `${t("searchRequestFailed")} ${error.message}` : t("searchRequestFailed"));
+    } finally {
+      setSendingRange(false);
     }
   }
 
@@ -2545,11 +2669,6 @@ function ExploreMapPage({ user, routeQuery, onConfirmRequest }: { user: Profile 
               <span className="explore-action-copy"><strong>{loading ? t("searchingMap") : t("searchMap")}</strong><small>{t("searchMapDetail")}</small></span>
               <Icon name="arrowRight" />
             </button>
-            <button className="explore-request-button" type="button" onClick={sendSearchRequest}>
-              <span className="explore-action-icon"><Icon name="message" /></span>
-              <span className="explore-action-copy"><strong>{t("sendSearchRequest")}</strong><small>{t("sendRequestDetail")}</small></span>
-              <Icon name="arrowRight" />
-            </button>
           </div>
         </form>
         <p className={`auth-message ${message ? messageTone : ""}`}>{message}</p>
@@ -2585,6 +2704,10 @@ function ExploreMapPage({ user, routeQuery, onConfirmRequest }: { user: Profile 
             radiusKm={radiusKm}
             onAreaCenterChange={setMapAreaCenter}
             onRadiusChange={setRadiusKm}
+            geographicArea={geographicArea}
+            canSendRange={Boolean(user)}
+            sendingRange={sendingRange}
+            onSendRange={sendSearchRequest}
           />
         </section>
       )}
@@ -2600,7 +2723,6 @@ function AuthPage({ onUser }: { onUser: (user: Profile | null) => void }) {
   const [verificationEmail, setVerificationEmail] = useState("");
   const [authSubmitting, setAuthSubmitting] = useState(false);
   const [passwordVisible, setPasswordVisible] = useState(false);
-  const [confirmPasswordVisible, setConfirmPasswordVisible] = useState(false);
   const [resendState, setResendState] = useState<"idle" | "sending" | "sent">("idle");
   const settleConfirmation = () => new Promise((resolve) => window.setTimeout(resolve, 450));
 
@@ -2623,7 +2745,9 @@ function AuthPage({ onUser }: { onUser: (user: Profile | null) => void }) {
       setMessageTone("success");
       setMessage(t("signedIn"));
       await settleConfirmation();
-      go(result.role === "admin" ? "/admin" : "/profile");
+      const returnTo = sessionStorage.getItem("auraAuthReturn");
+      if (returnTo) sessionStorage.removeItem("auraAuthReturn");
+      go(result.role === "admin" ? "/admin" : returnTo || "/profile");
     } catch (error) {
       setMessageTone("error");
       setMessage(error instanceof Error ? error.message : t("signInFailed"));
@@ -2696,7 +2820,7 @@ function AuthPage({ onUser }: { onUser: (user: Profile | null) => void }) {
         {mode === "signin" && (
           <form className="auth-form active" onSubmit={handleSignIn}>
             <label>{t("usernameOrEmail")}<input name="login" autoComplete="username" /></label>
-            <label>{t("password")}<span className="password-field"><input name="password" type={passwordVisible ? "text" : "password"} autoComplete="current-password" /><button type="button" aria-label={passwordVisible ? t("hidePassword") : t("showPassword")} title={passwordVisible ? t("hidePassword") : t("showPassword")} onClick={() => setPasswordVisible((visible) => !visible)}><Icon name={passwordVisible ? "x" : "eye"} /></button></span></label>
+            <label>{t("password")}<span className="password-field"><input name="password" type={passwordVisible ? "text" : "password"} autoComplete="current-password" /><button className="password-toggle" type="button" aria-label={passwordVisible ? t("hidePassword") : t("showPassword")} title={passwordVisible ? t("hidePassword") : t("showPassword")} onClick={() => setPasswordVisible((visible) => !visible)}><Icon name={passwordVisible ? "x" : "eye"} /></button></span></label>
             <button className="auth-primary-button" type="submit" disabled={authSubmitting}><Icon name="lock" />{authSubmitting ? t("signingIn") : t("enterPrivatePortal")}</button>
             <button className="auth-switch-link" type="button" onClick={() => setMode("signup")}><Icon name="user" />{t("dontHaveAccount")}</button>
           </form>
@@ -2705,8 +2829,8 @@ function AuthPage({ onUser }: { onUser: (user: Profile | null) => void }) {
           <form className="auth-form active" onSubmit={handleSignUp}>
             <label>{t("fullName")}<input name="name" /></label>
             <label>{t("email")}<input name="email" type="email" /></label>
-            <label>{t("password")}<span className="password-field"><input name="password" type={passwordVisible ? "text" : "password"} autoComplete="new-password" minLength={6} required /><button type="button" aria-label={passwordVisible ? t("hidePassword") : t("showPassword")} title={passwordVisible ? t("hidePassword") : t("showPassword")} onClick={() => setPasswordVisible((visible) => !visible)}><Icon name={passwordVisible ? "x" : "eye"} /></button></span></label>
-            <label>{t("confirmPassword")}<span className="password-field"><input name="confirmPassword" type={confirmPasswordVisible ? "text" : "password"} autoComplete="new-password" minLength={6} required /><button type="button" aria-label={confirmPasswordVisible ? t("hidePassword") : t("showPassword")} title={confirmPasswordVisible ? t("hidePassword") : t("showPassword")} onClick={() => setConfirmPasswordVisible((visible) => !visible)}><Icon name={confirmPasswordVisible ? "x" : "eye"} /></button></span></label>
+            <label>{t("password")}<span className="password-field"><input name="password" type={passwordVisible ? "text" : "password"} autoComplete="new-password" minLength={6} required /><button className="password-toggle" type="button" aria-label={passwordVisible ? t("hidePassword") : t("showPassword")} title={passwordVisible ? t("hidePassword") : t("showPassword")} onClick={() => setPasswordVisible((visible) => !visible)}><Icon name={passwordVisible ? "x" : "eye"} /></button></span></label>
+            <label>{t("confirmPassword")}<input name="confirmPassword" type="password" autoComplete="new-password" minLength={6} required /></label>
             <label>{t("intent")}<select name="intent"><option value="Buy">{t("buy")}</option><option value="Rent">{t("rent")}</option><option value="Invest">{t("invest")}</option><option value="List a property">{t("listAProperty")}</option></select></label>
             <button className="auth-primary-button" type="submit" disabled={authSubmitting}><Icon name="user" />{authSubmitting ? t("creatingAccount") : t("createPrivateAccount")}</button>
             <button className="auth-switch-link" type="button" onClick={() => setMode("signin")}><Icon name="lock" />{t("alreadyHaveAccount")}</button>
@@ -2729,7 +2853,7 @@ function AuthPage({ onUser }: { onUser: (user: Profile | null) => void }) {
   );
 }
 
-function ProfilePage({ user, onUser }: { user: Profile | null; onUser: (user: Profile | null) => void }) {
+function ProfilePage({ user, onUser, onConfirmRequest }: { user: Profile | null; onUser: (user: Profile | null) => void; onConfirmRequest: ConfirmAction }) {
   const { t } = useLanguage();
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -2769,6 +2893,14 @@ function ProfilePage({ user, onUser }: { user: Profile | null; onUser: (user: Pr
         <form className="profile-form" onSubmit={async (event) => {
           event.preventDefault();
           const data = new FormData(event.currentTarget);
+          if (!(await onConfirmRequest({
+            eyebrow: t("confirmAction"),
+            title: t("saveProfile"),
+            description: t("saveProfileConfirmation"),
+            confirmLabel: t("confirmProfileSave"),
+            tone: "save",
+            icon: "save",
+          }))) return;
           setSaving(true);
           setMessageTone("info");
           setMessage(t("savingProfile"));
@@ -2810,7 +2942,18 @@ function ProfilePage({ user, onUser }: { user: Profile | null; onUser: (user: Pr
           <label>{t("intent")}<select name="intent" defaultValue={user.intent || "Rent"}><option value="Buy">{t("buy")}</option><option value="Rent">{t("rent")}</option><option value="Invest">{t("invest")}</option><option value="List a property">{t("listAProperty")}</option></select></label>
           <div className="profile-actions">
             <button className="profile-save-button" type="submit" disabled={saving}><Icon name="save" />{saving ? t("savingProfile") : t("saveProfile")}</button>
-            <button className="profile-logout-button" type="button" onClick={async () => { await logout(); onUser(null); go("/auth"); }}><Icon name="x" />{t("logOut")}</button>
+            <button className="profile-logout-button icon-only" type="button" aria-label={t("logOut")} title={t("logOut")} onClick={async () => {
+              if (!(await onConfirmRequest({
+                eyebrow: t("confirmAction"),
+                title: t("logOut"),
+                description: t("logOutConfirmation"),
+                confirmLabel: t("confirmLogOut"),
+                icon: "arrowLeft",
+              }))) return;
+              await logout();
+              onUser(null);
+              go("/auth");
+            }}><Icon name="arrowLeft" /></button>
           </div>
           <p className={`auth-message ${message ? messageTone : ""}`}>{message}</p>
         </form>
@@ -2819,7 +2962,7 @@ function ProfilePage({ user, onUser }: { user: Profile | null; onUser: (user: Pr
   );
 }
 
-function AboutPage({ id, onNavigate, onAdvisor }: { id: string; onNavigate: (section: string) => void; onAdvisor: (context?: AdvisorContext) => void }) {
+function AboutPage({ id, onAdvisor }: { id: string; onAdvisor: (context?: AdvisorContext) => void }) {
   const { language } = useLanguage();
   useEffect(() => {
     if (id !== "contact") return;
@@ -2917,7 +3060,7 @@ function AboutPage({ id, onNavigate, onAdvisor }: { id: string; onNavigate: (sec
       <section className="section about-property-cta" id="contact-info">
         <div><p className="eyebrow">{content.closingLabel}</p><h2>{content.closingTitle}</h2><p>{content.closing}</p></div>
         <div className="about-property-actions">
-          <button type="button" onClick={() => onNavigate("residences")}><Icon name="building" />{content.explore}</button>
+          <button type="button" onClick={() => go("/explore-map")}><Icon name="map" />{content.explore}</button>
           <button type="button" onClick={() => onAdvisor({ source: "hurghada-destination" })}><Icon name="message" />{content.advisor}</button>
         </div>
       </section>
@@ -3083,6 +3226,14 @@ function AdminPage({
                 <div><dt>{t("residence")}</dt><dd>{request.desiredResidence || t("advisorRecommendation")}</dd></div>
                 <div><dt>{t("status")}</dt><dd>{request.status || "new"}</dd></div>
               </dl>
+              {request.geographicArea && (
+                <section className="admin-geographic-range">
+                  <span><Icon name="map" />{t("selectedArea")}</span>
+                  <strong>{request.geographicArea.radiusKm} km</strong>
+                  <p>{t("centerPoint")}: {request.geographicArea.centerLatitude.toFixed(4)}, {request.geographicArea.centerLongitude.toFixed(4)}</p>
+                  <small>N {request.geographicArea.bounds.north.toFixed(3)} · S {request.geographicArea.bounds.south.toFixed(3)} · E {request.geographicArea.bounds.east.toFixed(3)} · W {request.geographicArea.bounds.west.toFixed(3)}</small>
+                </section>
+              )}
               <div className="admin-actions">
                 {["reviewing", "contacted", "closed"].map((status) => (
                   <button
@@ -3364,13 +3515,13 @@ export default function App() {
     currentRoute.page === "auth" ? (
       <AuthPage onUser={setUser} />
     ) : currentRoute.page === "about" ? (
-      <AboutPage id={currentRoute.id} onNavigate={navigateSection} onAdvisor={openAdvisor} />
+      <AboutPage id={currentRoute.id} onAdvisor={openAdvisor} />
     ) : currentRoute.page === "explore-map" ? (
       <ExploreMapPage user={user} routeQuery={currentRoute.query} onConfirmRequest={confirmRequestSend} />
     ) : currentRoute.page === "detail" ? (
       <DetailPage user={user} properties={properties} id={currentRoute.id} />
     ) : currentRoute.page === "profile" ? (
-      <ProfilePage user={user} onUser={setUser} />
+      <ProfilePage user={user} onUser={setUser} onConfirmRequest={confirmRequestSend} />
     ) : currentRoute.page === "admin-unit" && authReady && isAdmin(user) ? (
       <UnitManagementPage
         properties={properties}
@@ -3403,7 +3554,7 @@ export default function App() {
 
   return (
     <LanguageContext.Provider value={languageContext}>
-      <Header user={user} settings={settings} activePage={currentRoute.page} onNavigate={navigateSection} onContact={openContactPage} />
+      <Header user={user} settings={settings} activePage={currentRoute.page} activeRouteId={currentRoute.id} onNavigate={navigateSection} onContact={openContactPage} />
       <div className={`page-transition ${transitioning ? "leaving" : "entered"}`} key={`${currentRoute.page}-${currentRoute.id}-${currentRoute.query}`}>
         {content}
       </div>
