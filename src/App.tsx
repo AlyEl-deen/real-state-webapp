@@ -3536,6 +3536,60 @@ export default function App() {
     document.documentElement.lang = language;
   }, [settings.brandName, language]);
 
+  useEffect(() => {
+    const selector = [
+      ".section-heading",
+      ".property-card",
+      ".collection-card",
+      ".insight",
+      ".about-benefit-card",
+      ".about-proof-strip > div",
+      ".investment-snapshot-panel",
+      ".explore-range-receipt",
+      ".admin-listing",
+      ".admin-request-card",
+      ".admin-hero .metric",
+      ".profile-card",
+    ].join(",");
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const observed = new WeakSet<Element>();
+    const revealObserver = reducedMotion ? null : new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add("motion-visible");
+        revealObserver?.unobserve(entry.target);
+      });
+    }, { threshold: 0.08, rootMargin: "0px 0px -8% 0px" });
+
+    const register = (root: ParentNode | Element) => {
+      const targets: Element[] = [];
+      if (root instanceof Element && root.matches(selector)) targets.push(root);
+      targets.push(...Array.from(root.querySelectorAll(selector)));
+      targets.forEach((target, index) => {
+        if (observed.has(target)) return;
+        observed.add(target);
+        target.classList.add("motion-reveal");
+        if (target instanceof HTMLElement) target.style.setProperty("--motion-delay", `${Math.min(index % 6, 5) * 55}ms`);
+        if (reducedMotion) target.classList.add("motion-visible");
+        else revealObserver?.observe(target);
+      });
+    };
+
+    register(document);
+    const mutationObserver = new MutationObserver((records) => {
+      records.forEach((record) => record.addedNodes.forEach((node) => {
+        if (node instanceof Element) register(node);
+      }));
+    });
+    const page = document.querySelector(".page-transition");
+    if (page) mutationObserver.observe(page, { childList: true, subtree: true });
+
+    return () => {
+      mutationObserver.disconnect();
+      revealObserver?.disconnect();
+    };
+  }, [currentRoute.page, currentRoute.id, currentRoute.query]);
+
   const content =
     currentRoute.page === "auth" ? (
       <AuthPage onUser={setUser} />

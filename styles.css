@@ -4056,6 +4056,100 @@ progress {
   }
 }
 
+/* Cinematic motion system: restrained, directional, and viewport-aware. */
+.motion-reveal {
+  --motion-delay: 0ms;
+  opacity: 0;
+  transform: translate3d(0, 24px, 0) scale(0.992);
+  filter: blur(5px);
+  transition:
+    opacity 720ms var(--ease-out) var(--motion-delay),
+    transform 820ms var(--ease-out) var(--motion-delay),
+    filter 620ms var(--ease-out) var(--motion-delay),
+    border-color var(--interaction-duration) var(--interaction-ease),
+    box-shadow var(--interaction-duration) var(--interaction-ease) !important;
+  will-change: opacity, transform, filter;
+}
+
+.motion-reveal.motion-visible {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
+  filter: blur(0);
+  will-change: auto;
+}
+
+.motion-reveal.motion-visible.metric strong,
+.admin-hero .metric.motion-visible strong {
+  animation: auraMetricSettle 680ms var(--ease-out) calc(var(--motion-delay) + 120ms) both;
+}
+
+@keyframes auraMetricSettle {
+  0% { opacity: 0; transform: translateY(10px) scale(0.9); }
+  60% { opacity: 1; transform: translateY(-2px) scale(1.025); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (min-width: 761px) and (prefers-reduced-motion: no-preference) {
+  .hero img {
+    animation: auraHeroDrift 18s ease-in-out infinite alternate;
+    transform-origin: 58% 52%;
+  }
+
+  .about-destination-hero::after {
+    animation: auraAmbientSweep 12s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes auraHeroDrift {
+  from { transform: scale(1.01) translate3d(0, 0, 0); }
+  to { transform: scale(1.065) translate3d(-0.7%, -0.4%, 0); }
+}
+
+@keyframes auraAmbientSweep {
+  from { opacity: 0.66; transform: translate3d(-1.5%, 0, 0); }
+  to { opacity: 0.92; transform: translate3d(1.5%, 0, 0); }
+}
+
+.explore-range-status .ui-icon {
+  animation: auraRangeReady 2.8s ease-in-out infinite;
+  transform-origin: center;
+}
+
+@keyframes auraRangeReady {
+  0%, 72%, 100% { transform: scale(1); filter: drop-shadow(0 0 0 rgba(212, 175, 55, 0)); }
+  82% { transform: scale(1.12); filter: drop-shadow(0 0 8px rgba(212, 175, 55, 0.55)); }
+}
+
+.investment-snapshot-selector button.active .ui-icon,
+.admin-section-nav button.active .ui-icon {
+  animation: auraActiveIcon 520ms var(--ease-out) both;
+}
+
+@keyframes auraActiveIcon {
+  from { opacity: 0; transform: translateX(-6px) scale(0.86); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .motion-reveal,
+  .motion-reveal.motion-visible {
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+    transition: none !important;
+  }
+
+  .hero img,
+  .about-destination-hero::after,
+  .explore-range-status .ui-icon,
+  .investment-snapshot-selector button.active .ui-icon,
+  .admin-section-nav button.active .ui-icon,
+  .metric strong {
+    animation: none !important;
+    transform: none !important;
+  }
+}
+
 .admin-units-first {
   padding-top: 0;
 }
@@ -6390,5 +6484,20 @@ a:active {
   .explore-range-receipt dl,
   .explore-range-send-button {
     grid-column: 1;
+  }
+}
+
+/* Keep the pre-reveal pose authoritative over component base transforms. */
+.page-transition .motion-reveal:not(.motion-visible) {
+  opacity: 0;
+  transform: translate3d(0, 24px, 0) scale(0.992);
+  filter: blur(5px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-transition .motion-reveal:not(.motion-visible) {
+    opacity: 1;
+    transform: none;
+    filter: none;
   }
 }
