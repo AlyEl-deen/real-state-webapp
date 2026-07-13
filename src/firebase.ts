@@ -22,10 +22,11 @@ import {
 } from "firebase/firestore";
 import { getDownloadURL, getStorage, ref, uploadBytes } from "firebase/storage";
 import { defaultProperties, defaultSiteSettings } from "./data";
-import type { AdvisorRequest, ManagedRequest, Profile, Property, RentalRequest, SiteSettings } from "./types";
+import type { AdvisorRequest, ExploreLead, ManagedRequest, Profile, Property, RentalRequest, SiteSettings } from "./types";
 
+const firebaseApiKey = import.meta.env.VITE_FIREBASE_API_KEY as string | undefined;
 const firebaseConfig = {
-  apiKey: "AIzaSyC1Wr1Vx4el6gE6-r-joY8LT_He0EjGpg0",
+  apiKey: firebaseApiKey ?? "AIzaSyC1Wr1Vx4el6gE6-r-joY8LT_He0EjGpg0",
   authDomain: "real-state-2ad86.firebaseapp.com",
   projectId: "real-state-2ad86",
   storageBucket: "real-state-2ad86.firebasestorage.app",
@@ -291,6 +292,35 @@ export async function submitAdvisorRequest(request: AdvisorRequest) {
   const local = readJson<AdvisorRequest[]>("auraAdvisorRequests", []);
   writeJson("auraAdvisorRequests", local.concat(payload));
   const synced = await tryFirestoreWrite(addDoc(collection(db, "advisorRequests"), payload));
+  return { synced, payload };
+}
+
+export async function submitExploreLead(lead: ExploreLead) {
+  const payload: ExploreLead = {
+    ...lead,
+    userId: lead.userId || auth.currentUser?.uid || "guest",
+    userEmail: lead.userEmail || auth.currentUser?.email || "",
+    createdAt: new Date().toISOString(),
+    status: "new",
+  };
+
+  const local = readJson<ExploreLead[]>("auraExploreMapLeads", []);
+  writeJson("auraExploreMapLeads", local.concat(payload));
+
+  const crmEndpoint = import.meta.env.VITE_CRM_LEAD_ENDPOINT as string | undefined;
+  if (crmEndpoint) {
+    try {
+      await fetch(crmEndpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } catch (error) {
+      console.warn(error instanceof Error ? error.message : "CRM lead post failed; local lead was saved.");
+    }
+  }
+
+  const synced = await tryFirestoreWrite(addDoc(collection(db, "exploreMapLeads"), payload));
   return { synced, payload };
 }
 

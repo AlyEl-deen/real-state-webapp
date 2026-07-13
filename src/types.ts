@@ -71,3 +71,26 @@ export type ManagedRequest = (RentalRequest | AdvisorRequest) & {
   userId?: string;
   userEmail?: string;
 };
+
+export type ExploreLead = {
+  source: "explore-map";
+  userId?: string;
+  userEmail?: string;
+  searchedArea: string;
+  accommodationType: string;
+  resultCount: number;
+  excludedCommercial: true;
+  geographicArea?: {
+    centerLatitude: number;
+    centerLongitude: number;
+    radiusKm: number;
+    bounds: {
+      north: number;
+      south: number;
+      east: number;
+      west: number;
+    };
+  };
+  createdAt?: string;
+  status?: string;
+};

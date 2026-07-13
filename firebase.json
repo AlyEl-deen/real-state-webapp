@@ -8,6 +8,10 @@
     ],
     "rewrites": [
       {
+        "source": "/api/search-accommodations",
+        "function": "api"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }

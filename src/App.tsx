@@ -1,4 +1,5 @@
-import { createContext, FormEvent, useContext, useEffect, useId, useMemo, useState } from "react";
+import { createContext, FormEvent, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
+import * as L from "leaflet";
 import type { AdvisorRequest, ManagedRequest, Profile, Property, SiteSettings } from "./types";
 import { defaultProperties, defaultSiteSettings, rates } from "./data";
 import {
@@ -18,6 +19,7 @@ import {
   signIn,
   signUp,
   submitAdvisorRequest,
+  submitExploreLead,
   submitRentalRequest,
   updateManagedRequestStatus,
   updateProfileData,
@@ -25,7 +27,7 @@ import {
   waitForAuth,
 } from "./firebase";
 
-type Page = "home" | "about" | "auth" | "detail" | "profile" | "admin" | "admin-unit";
+type Page = "home" | "about" | "auth" | "detail" | "profile" | "admin" | "admin-unit" | "explore-map";
 type AdvisorContext = {
   source: string;
   property?: string;
@@ -38,6 +40,25 @@ type ConfirmationRequest = {
   label: string;
   resolve: (confirmed: boolean) => void;
 };
+type AccommodationType = "all" | "studio" | "monthly" | "compound" | "apartment";
+type DurationType = "any" | "nightly" | "weekly" | "monthly" | "seasonal";
+type MapRental = {
+  id: string;
+  title: string;
+  address: string;
+  area: string;
+  category: AccommodationType;
+  image: string;
+  summary: string;
+  durations?: DurationType[];
+  lat: number;
+  lng: number;
+  bedrooms: number;
+  priceLabel: string;
+  source?: "proxy" | "curated";
+  placeTypes?: string[];
+};
+type MapAreaCenter = { lat: number; lng: number };
 type Language = "en" | "de" | "it";
 type LanguageContextValue = {
   language: Language;
@@ -46,6 +67,7 @@ type LanguageContextValue = {
 };
 type IconName =
   | "arrowLeft"
+  | "arrowRight"
   | "building"
   | "calendar"
   | "check"
@@ -91,6 +113,52 @@ const translations = {
     about: "About",
     contact: "Contact",
     concierge: "Concierge",
+    exploreMap: "Explore Map",
+    mapSearchHeadline: "Find Your Next Vacation Home on the Map",
+    mapSearchCopy: "Browse the map, choose a country and city, then send a filtered search request for our team to find the best independent offer.",
+    areaNeighborhood: "Area or neighborhood",
+    searchAreaPlaceholder: "El Gouna, Sahl Hasheesh, Al Ahyaa...",
+    country: "Country",
+    city: "City",
+    countryPlaceholder: "Egypt",
+    cityPlaceholder: "Hurghada",
+    searchRange: "Range",
+    duration: "Duration",
+    anyDuration: "Any duration",
+    nightly: "Nightly",
+    weekly: "Weekly",
+    monthlyDuration: "Monthly",
+    seasonal: "Seasonal",
+    accommodationType: "Accommodation type",
+    allResidential: "All residential rentals",
+    studios: "Studios",
+    monthlyRentals: "Monthly rentals",
+    compounds: "Compounds",
+    apartments: "Apartments",
+    searchMap: "Search Map",
+    sendSearchRequest: "Send Search Request",
+    searchRequestSent: "Search request sent to our advisory team.",
+    searchRequestFailed: "Could not send this search request.",
+    openMapSearch: "Open Map Search",
+    searchingMap: "Searching map...",
+    independentOnly: "Independent rentals only",
+    sidePanelTitle: "Available independent homes",
+    mapPanelTitle: "Residential rental map",
+    excludedCommercial: "Hotels and resorts excluded",
+    exactAddress: "Exact address",
+    noMapResults: "No independent rentals found for this area yet.",
+    crmLeadLogged: "Search logged for advisor follow-up.",
+    crmLeadFailed: "Search completed. Lead was saved locally and will sync when available.",
+    apiFallbackNotice: "Showing curated independent rentals while live Places/Gemini search is unavailable.",
+    showingBestMatches: "Showing the best independent matches for your selected filter.",
+    interestedDeal: "Interested - Make a Deal",
+    dealRequestSent: "Deal request sent to our advisory team.",
+    dealRequestFailed: "Could not send this deal request.",
+    chooseMapArea: "Choose preferred area",
+    chooseMapAreaHint: "Click the map to place the center, then drag the gold edge handle to resize the range.",
+    selectedArea: "Selected area",
+    searchMapDetail: "Refresh matching residences",
+    sendRequestDetail: "Send area and filters to our team",
     profile: "Profile",
     signIn: "Sign In",
     admin: "Admin",
@@ -240,6 +308,9 @@ const translations = {
     verificationPending: "Email verification pending",
     profileImageUrl: "Profile image URL",
     saveProfile: "Save Profile",
+    savingProfile: "Saving profile...",
+    profileSaved: "Profile saved.",
+    profileSaveFailed: "Could not save profile.",
     logOut: "Log Out",
     controlRoom: "control room.",
     totalListings: "Total Listings",
@@ -314,6 +385,52 @@ const translations = {
     about: "Über uns",
     contact: "Kontakt",
     concierge: "Concierge",
+    exploreMap: "Karte entdecken",
+    mapSearchHeadline: "Finden Sie Ihr naechstes Ferienhaus auf der Karte",
+    mapSearchCopy: "Durchsuchen Sie die Karte, waehlen Sie Land und Stadt und senden Sie eine gefilterte Suchanfrage fuer das beste unabhaengige Angebot.",
+    areaNeighborhood: "Gebiet oder Stadtteil",
+    searchAreaPlaceholder: "El Gouna, Sahl Hasheesh, Al Ahyaa...",
+    country: "Land",
+    city: "Stadt",
+    countryPlaceholder: "Aegypten",
+    cityPlaceholder: "Hurghada",
+    searchRange: "Reichweite",
+    duration: "Dauer",
+    anyDuration: "Jede Dauer",
+    nightly: "Pro Nacht",
+    weekly: "Woechentlich",
+    monthlyDuration: "Monatlich",
+    seasonal: "Saisonal",
+    accommodationType: "Unterkunftsart",
+    allResidential: "Alle Wohnmieten",
+    studios: "Studios",
+    monthlyRentals: "Monatsmieten",
+    compounds: "Compounds",
+    apartments: "Apartments",
+    searchMap: "Karte suchen",
+    sendSearchRequest: "Suchanfrage senden",
+    searchRequestSent: "Suchanfrage an unser Beratungsteam gesendet.",
+    searchRequestFailed: "Diese Suchanfrage konnte nicht gesendet werden.",
+    openMapSearch: "Kartensuche oeffnen",
+    searchingMap: "Karte wird gesucht...",
+    independentOnly: "Nur unabhaengige Mieten",
+    sidePanelTitle: "Verfuegbare unabhaengige Einheiten",
+    mapPanelTitle: "Karte fuer Wohnmieten",
+    excludedCommercial: "Hotels und Resorts ausgeschlossen",
+    exactAddress: "Exakte Adresse",
+    noMapResults: "Noch keine unabhaengigen Mieten fuer dieses Gebiet gefunden.",
+    crmLeadLogged: "Suche fuer Berater-Follow-up gespeichert.",
+    crmLeadFailed: "Suche abgeschlossen. Lead wurde lokal gespeichert und wird synchronisiert, sobald moeglich.",
+    apiFallbackNotice: "Kuratierte unabhaengige Mieten werden angezeigt, waehrend Live Places/Gemini nicht verfuegbar ist.",
+    showingBestMatches: "Die besten unabhaengigen Treffer fuer den gewaehlten Filter werden angezeigt.",
+    interestedDeal: "Interessiert - Deal anfragen",
+    dealRequestSent: "Deal-Anfrage an unser Beratungsteam gesendet.",
+    dealRequestFailed: "Diese Deal-Anfrage konnte nicht gesendet werden.",
+    chooseMapArea: "Wunschgebiet auswaehlen",
+    chooseMapAreaHint: "Klicken Sie fuer den Mittelpunkt auf die Karte und ziehen Sie den goldenen Randgriff, um den Radius zu aendern.",
+    selectedArea: "Ausgewaehltes Gebiet",
+    searchMapDetail: "Passende Residenzen aktualisieren",
+    sendRequestDetail: "Gebiet und Filter an unser Team senden",
     profile: "Profil",
     signIn: "Anmelden",
     admin: "Admin",
@@ -463,6 +580,9 @@ const translations = {
     verificationPending: "E-Mail-Verifizierung ausstehend",
     profileImageUrl: "Profilbild-URL",
     saveProfile: "Profil speichern",
+    savingProfile: "Profil wird gespeichert...",
+    profileSaved: "Profil gespeichert.",
+    profileSaveFailed: "Profil konnte nicht gespeichert werden.",
     logOut: "Abmelden",
     controlRoom: "Kontrollraum.",
     totalListings: "Alle Inserate",
@@ -537,6 +657,52 @@ const translations = {
     about: "Chi siamo",
     contact: "Contatto",
     concierge: "Concierge",
+    exploreMap: "Mappa esplora",
+    mapSearchHeadline: "Trova la tua prossima casa vacanza sulla mappa",
+    mapSearchCopy: "Sfoglia la mappa, scegli paese e citta e invia una richiesta filtrata per trovare la migliore offerta indipendente.",
+    areaNeighborhood: "Area o quartiere",
+    searchAreaPlaceholder: "El Gouna, Sahl Hasheesh, Al Ahyaa...",
+    country: "Paese",
+    city: "Citta",
+    countryPlaceholder: "Egitto",
+    cityPlaceholder: "Hurghada",
+    searchRange: "Raggio",
+    duration: "Durata",
+    anyDuration: "Qualsiasi durata",
+    nightly: "Notte",
+    weekly: "Settimanale",
+    monthlyDuration: "Mensile",
+    seasonal: "Stagionale",
+    accommodationType: "Tipo di alloggio",
+    allResidential: "Tutti gli affitti residenziali",
+    studios: "Monolocali",
+    monthlyRentals: "Affitti mensili",
+    compounds: "Compound",
+    apartments: "Appartamenti",
+    searchMap: "Cerca sulla mappa",
+    sendSearchRequest: "Invia richiesta ricerca",
+    searchRequestSent: "Richiesta ricerca inviata al nostro team.",
+    searchRequestFailed: "Impossibile inviare questa richiesta ricerca.",
+    openMapSearch: "Apri ricerca mappa",
+    searchingMap: "Ricerca mappa...",
+    independentOnly: "Solo affitti indipendenti",
+    sidePanelTitle: "Case indipendenti disponibili",
+    mapPanelTitle: "Mappa affitti residenziali",
+    excludedCommercial: "Hotel e resort esclusi",
+    exactAddress: "Indirizzo esatto",
+    noMapResults: "Nessun affitto indipendente trovato per questa area.",
+    crmLeadLogged: "Ricerca salvata per follow-up del consulente.",
+    crmLeadFailed: "Ricerca completata. Lead salvato localmente e sincronizzato quando disponibile.",
+    apiFallbackNotice: "Mostriamo affitti indipendenti curati mentre Places/Gemini live non e disponibile.",
+    showingBestMatches: "Mostriamo i migliori risultati indipendenti per il filtro scelto.",
+    interestedDeal: "Interessato - crea accordo",
+    dealRequestSent: "Richiesta accordo inviata al nostro team.",
+    dealRequestFailed: "Impossibile inviare questa richiesta accordo.",
+    chooseMapArea: "Scegli l'area preferita",
+    chooseMapAreaHint: "Fai clic per impostare il centro, poi trascina la maniglia dorata sul bordo per ridimensionare il raggio.",
+    selectedArea: "Area selezionata",
+    searchMapDetail: "Aggiorna le residenze corrispondenti",
+    sendRequestDetail: "Invia area e filtri al nostro team",
     profile: "Profilo",
     signIn: "Accedi",
     admin: "Admin",
@@ -686,6 +852,9 @@ const translations = {
     verificationPending: "Verifica email in sospeso",
     profileImageUrl: "URL immagine profilo",
     saveProfile: "Salva profilo",
+    savingProfile: "Salvataggio profilo...",
+    profileSaved: "Profilo salvato.",
+    profileSaveFailed: "Impossibile salvare il profilo.",
     logOut: "Esci",
     controlRoom: "control room.",
     totalListings: "Inserzioni totali",
@@ -770,6 +939,7 @@ const useLanguage = () => {
 
 const iconPaths: Record<IconName, string[]> = {
   arrowLeft: ["M19 12H5", "M12 19l-7-7 7-7"],
+  arrowRight: ["M5 12h14", "M12 5l7 7-7 7"],
   building: ["M4 20h16", "M6 20V6l8-3 4 2v15", "M9 9h1", "M9 13h1", "M14 9h1", "M14 13h1"],
   calendar: ["M7 3v4", "M17 3v4", "M4 8h16", "M5 5h14v15H5z"],
   check: ["M5 12l4 4L19 6"],
@@ -812,8 +982,9 @@ function Icon({ name }: { name: IconName }) {
 
 const route = () => {
   const hash = window.location.hash.replace(/^#\/?/, "");
-  const [page = "home", id = ""] = hash.split("/");
-  return { page: (page || "home") as Page, id };
+  const [path = "home", query = ""] = hash.split("?");
+  const [page = "home", id = ""] = path.split("/");
+  return { page: (page || "home") as Page, id, query };
 };
 
 const go = (path: string) => {
@@ -838,6 +1009,177 @@ const goHomeSection = (id: string) => {
   window.setTimeout(() => smoothScrollTo(id), 120);
 };
 
+const accommodationOptions: { value: AccommodationType; labelKey: TranslationKey }[] = [
+  { value: "all", labelKey: "allResidential" },
+  { value: "studio", labelKey: "studios" },
+  { value: "monthly", labelKey: "monthlyRentals" },
+  { value: "compound", labelKey: "compounds" },
+  { value: "apartment", labelKey: "apartments" },
+];
+
+const durationOptions: { value: DurationType; labelKey: TranslationKey }[] = [
+  { value: "any", labelKey: "anyDuration" },
+  { value: "nightly", labelKey: "nightly" },
+  { value: "weekly", labelKey: "weekly" },
+  { value: "monthly", labelKey: "monthlyDuration" },
+  { value: "seasonal", labelKey: "seasonal" },
+];
+
+const hurghadaAreas = ["El Gouna", "Sahl Hasheesh", "Al Ahyaa", "Sheraton Road", "El Kawther", "Makadi Bay", "Mubarak 6"];
+const areaCenters: Record<string, { lat: number; lng: number }> = {
+  hurghada: { lat: 27.2579, lng: 33.8116 },
+  "el gouna": { lat: 27.4026, lng: 33.6785 },
+  "sahl hasheesh": { lat: 27.0522, lng: 33.8892 },
+  "al ahyaa": { lat: 27.3132, lng: 33.7395 },
+  "sheraton road": { lat: 27.2176, lng: 33.8382 },
+  "el kawther": { lat: 27.1913, lng: 33.8268 },
+  "mubarak 6": { lat: 27.2258, lng: 33.8038 },
+};
+const commercialBlockList = ["hotel", "resort", "hostel", "motel", "inn", "lodge", "casino", "marriott", "hilton", "steigenberger", "rixos", "jazz", "jaz ", "sentido", "steigen", "club"];
+
+const curatedHurghadaRentals: MapRental[] = [
+  { id: "gouna-lagoon-studio", title: "Lagoon View Studio Residence", address: "Abu Tig Marina Extension, El Gouna, Hurghada", area: "El Gouna", category: "studio", image: "assets/hero-villa.png", summary: "Compact marina-side studio suitable for short stays and owner-managed rental checks.", lat: 27.4026, lng: 33.6785, bedrooms: 1, priceLabel: "Monthly ready", source: "curated" },
+  { id: "gouna-marina-apartment", title: "Marina One Bedroom Apartment", address: "New Marina Walk, El Gouna, Hurghada", area: "El Gouna", category: "apartment", image: "assets/penthouse.png", summary: "Independent one-bedroom apartment near the marina promenade, not a hotel inventory unit.", lat: 27.4098, lng: 33.6741, bedrooms: 1, priceLabel: "Short stay / monthly", source: "curated" },
+  { id: "gouna-west-compound", title: "West Golf Compound Residence", address: "West Golf Residential Cluster, El Gouna, Hurghada", area: "El Gouna", category: "compound", image: "assets/island-villa.png", summary: "Compound residence with private owner rental potential and advisor review required.", lat: 27.3908, lng: 33.6657, bedrooms: 2, priceLabel: "Owner managed", source: "curated" },
+  { id: "gouna-monthly-townhome", title: "Downtown Monthly Town Apartment", address: "Downtown El Gouna Residential Lane, Hurghada", area: "El Gouna", category: "monthly", image: "assets/desert-villa.png", summary: "Monthly rental candidate in a residential lane for longer stays and relocation clients.", lat: 27.3951, lng: 33.6779, bedrooms: 2, priceLabel: "Monthly lease", source: "curated" },
+  { id: "sahl-hasheesh-compound", title: "Bayfront Compound Apartment", address: "Old Town Promenade, Sahl Hasheesh, Hurghada", area: "Sahl Hasheesh", category: "compound", image: "assets/island-villa.png", summary: "Residential compound apartment near the promenade, screened away from resort inventory.", lat: 27.0499, lng: 33.8911, bedrooms: 2, priceLabel: "Managed rental", source: "curated" },
+  { id: "sahl-hasheesh-monthly", title: "Palm Residence Monthly Rental", address: "Palm Beach Road Residential Strip, Sahl Hasheesh, Hurghada", area: "Sahl Hasheesh", category: "monthly", image: "assets/desert-villa.png", summary: "Longer-stay residential rental candidate with owner negotiation required.", lat: 27.0576, lng: 33.8828, bedrooms: 2, priceLabel: "Monthly lease", source: "curated" },
+  { id: "sahl-hasheesh-studio", title: "Old Town Studio Suite", address: "Old Town Residential Court, Sahl Hasheesh, Hurghada", area: "Sahl Hasheesh", category: "studio", image: "assets/hero-villa.png", summary: "Small independent studio-style unit for individual travelers and remote-work stays.", lat: 27.0522, lng: 33.8892, bedrooms: 1, priceLabel: "Flexible rental", source: "curated" },
+  { id: "sahl-hasheesh-apartment", title: "Veranda District Two Bedroom", address: "Veranda Residential District, Sahl Hasheesh, Hurghada", area: "Sahl Hasheesh", category: "apartment", image: "assets/penthouse.png", summary: "Two-bedroom apartment candidate in a residential district, suitable for advisor follow-up.", lat: 27.0612, lng: 33.8784, bedrooms: 2, priceLabel: "Advisor pricing", source: "curated" },
+  { id: "ahyaa-studio", title: "North Coast Studio Unit", address: "Al Ahyaa Coastal Road, Hurghada", area: "Al Ahyaa", category: "studio", image: "assets/hero-villa.png", summary: "Independent studio on the northern coastal road with flexible rental potential.", lat: 27.3132, lng: 33.7395, bedrooms: 1, priceLabel: "Flexible rental", source: "curated" },
+  { id: "ahyaa-monthly", title: "Al Ahyaa Monthly Flat", address: "Al Ahyaa Residential Block, Hurghada", area: "Al Ahyaa", category: "monthly", image: "assets/desert-villa.png", summary: "Simple monthly residential flat for budget-conscious long stays.", lat: 27.3007, lng: 33.7465, bedrooms: 1, priceLabel: "Monthly option", source: "curated" },
+  { id: "kawther-apartment", title: "El Kawther City Apartment", address: "El Kawther District, Hurghada", area: "El Kawther", category: "apartment", image: "assets/penthouse.png", summary: "City apartment close to daily services, best handled by direct owner negotiation.", lat: 27.1913, lng: 33.8268, bedrooms: 2, priceLabel: "City rental", source: "curated" },
+  { id: "kawther-studio", title: "El Kawther Compact Studio", address: "El Kawther Residential Street, Hurghada", area: "El Kawther", category: "studio", image: "assets/hero-villa.png", summary: "Compact private studio in a residential zone, not hotel-operated.", lat: 27.1957, lng: 33.8214, bedrooms: 1, priceLabel: "Flexible rental", source: "curated" },
+  { id: "mubarak-six-compound", title: "Mubarak 6 Garden Compound Home", address: "Mubarak 6, Hurghada", area: "Mubarak 6", category: "compound", image: "assets/desert-villa.png", summary: "Family-sized compound home for private rental management or purchase inquiry.", lat: 27.2258, lng: 33.8038, bedrooms: 3, priceLabel: "Family ready", source: "curated" },
+  { id: "mubarak-six-apartment", title: "Mubarak 6 Residential Apartment", address: "Mubarak 6 Residential Zone, Hurghada", area: "Mubarak 6", category: "apartment", image: "assets/penthouse.png", summary: "Residential apartment with owner-side negotiation and advisory follow-up.", lat: 27.2301, lng: 33.8076, bedrooms: 2, priceLabel: "Advisor pricing", source: "curated" },
+  { id: "sheraton-monthly", title: "Sheraton Road Private Apartment", address: "Sheraton Road Residential Block, Hurghada", area: "Sheraton Road", category: "monthly", image: "assets/penthouse.png", summary: "Monthly private apartment close to central services and marina access.", lat: 27.2176, lng: 33.8382, bedrooms: 2, priceLabel: "Monthly option", source: "curated" },
+  { id: "sheraton-studio", title: "Sheraton Road Studio Flat", address: "Sheraton Road Side Street, Hurghada", area: "Sheraton Road", category: "studio", image: "assets/hero-villa.png", summary: "Private studio flat in the central corridor, suitable for quick advisor screening.", lat: 27.2204, lng: 33.8349, bedrooms: 1, priceLabel: "Short stay", source: "curated" },
+];
+
+const isCommercialAccommodation = (rental: MapRental) => {
+  const searchable = `${rental.title} ${rental.address} ${(rental.placeTypes || []).join(" ")}`.toLowerCase();
+  return commercialBlockList.some((word) => searchable.includes(word)) || (rental.placeTypes || []).some((type) => ["hotel", "lodging", "resort_hotel"].includes(type));
+};
+
+const normalizeSearchText = (value: string) =>
+  value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+const defaultDurationsFor = (rental: Pick<MapRental, "category" | "priceLabel">): DurationType[] => {
+  const label = rental.priceLabel.toLowerCase();
+  if (rental.category === "monthly" || label.includes("monthly")) return ["monthly", "seasonal"];
+  if (rental.category === "studio") return ["nightly", "weekly", "monthly"];
+  if (rental.category === "compound") return ["weekly", "monthly", "seasonal"];
+  return ["nightly", "weekly", "monthly"];
+};
+
+const distanceKm = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => {
+  const toRad = (value: number) => (value * Math.PI) / 180;
+  const earthKm = 6371;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const x = Math.sin(dLat / 2) ** 2 + Math.sin(dLng / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
+  return 2 * earthKm * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+};
+
+const dedupeRentals = (rentals: MapRental[]) => {
+  const seen = new Set<string>();
+  return rentals.filter((rental) => {
+    const key = `${normalizeSearchText(rental.title)}|${normalizeSearchText(rental.address)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+const filterIndependentRentals = (
+  rentals: MapRental[],
+  area: string,
+  category: AccommodationType,
+  duration: DurationType = "any",
+  radiusKm = 60,
+  country = "Egypt",
+  city = "Hurghada"
+) => {
+  const normalizedCountry = normalizeSearchText(country);
+  const normalizedCity = normalizeSearchText(city);
+  const normalizedArea = normalizeSearchText(area);
+  const broadHurghadaSearch = !normalizedArea || normalizedArea === "hurghada";
+  const centerKey = normalizedArea && areaCenters[normalizedArea] ? normalizedArea : normalizedCity && areaCenters[normalizedCity] ? normalizedCity : "hurghada";
+  const center = areaCenters[centerKey] || areaCenters.hurghada;
+  return dedupeRentals(rentals).filter((rental) => {
+    if (normalizedCountry && normalizedCountry !== "egypt") return false;
+    if (normalizedCity && normalizedCity !== "hurghada") return false;
+    const areaText = normalizeSearchText(`${rental.area} ${rental.address}`);
+    const matchesArea = broadHurghadaSearch || areaText.includes(normalizedArea);
+    const matchesCategory = category === "all" || rental.category === category;
+    const matchesDuration = duration === "any" || (rental.durations || defaultDurationsFor(rental)).includes(duration);
+    const inRange = distanceKm(center, rental) <= radiusKm;
+    return matchesArea && matchesCategory && matchesDuration && inRange && !isCommercialAccommodation(rental);
+  });
+};
+
+const normalizeProxyRentals = (items: Partial<MapRental>[] = []): MapRental[] =>
+  items
+    .filter((item) => item.title && item.address && typeof item.lat === "number" && typeof item.lng === "number")
+    .map((item, index) => ({
+      id: item.id || `proxy-rental-${index + 1}`,
+      title: item.title || "Independent rental",
+      address: item.address || "Hurghada",
+      area: item.area || "Hurghada",
+      category: item.category || "apartment",
+      image: item.image || (item.category === "studio" ? "assets/hero-villa.png" : item.category === "compound" ? "assets/island-villa.png" : "assets/penthouse.png"),
+      summary: item.summary || "Live map result screened for independent residential rental review.",
+      durations: item.durations || defaultDurationsFor({ category: item.category || "apartment", priceLabel: item.priceLabel || "Advisor pricing" }),
+      lat: item.lat || 27.2579,
+      lng: item.lng || 33.8116,
+      bedrooms: item.bedrooms || 1,
+      priceLabel: item.priceLabel || "Advisor pricing",
+      source: "proxy",
+      placeTypes: item.placeTypes || [],
+    }));
+
+async function searchIndependentRentals(country: string, city: string, area: string, category: AccommodationType, duration: DurationType, radiusKm: number) {
+  const endpoint = (import.meta.env.VITE_ACCOMMODATION_SEARCH_ENDPOINT as string | undefined) || "/api/search-accommodations";
+  if (endpoint) {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        country,
+        area,
+        city,
+        radiusKm,
+        accommodationType: category,
+        duration,
+        excludeCommercialTypes: ["hotel", "resort", "lodging"],
+        categories: ["Studios", "Monthly Rentals", "Compounds", "Apartments"],
+        providerIntent: "Google Places plus Gemini residential classification",
+      }),
+    });
+    if (!response.ok) throw new Error("Map search endpoint failed.");
+    const data = (await response.json()) as { results?: Partial<MapRental>[] };
+    const proxyMatches = filterIndependentRentals(normalizeProxyRentals(data.results), area, category, duration, radiusKm, country, city);
+    return {
+      rentals: proxyMatches,
+      usedFallback: proxyMatches.length === 0,
+    };
+  }
+
+  return { rentals: filterIndependentRentals(curatedHurghadaRentals, area, category, duration, radiusKm, country, city), usedFallback: true };
+}
+
+async function getIndependentRentalResults(country: string, city: string, area: string, category: AccommodationType, duration: DurationType, radiusKm: number) {
+  try {
+    const result = await searchIndependentRentals(country, city, area, category, duration, radiusKm);
+    if (result.rentals.length) return result;
+    return { rentals: filterIndependentRentals(curatedHurghadaRentals, area, category, duration, radiusKm, country, city), usedFallback: true };
+  } catch {
+    return { rentals: filterIndependentRentals(curatedHurghadaRentals, area, category, duration, radiusKm, country, city), usedFallback: true };
+  }
+}
+
 const initials = (value = "A") =>
   value
     .split(/[\s@.]+/)
@@ -847,6 +1189,30 @@ const initials = (value = "A") =>
     .join("");
 
 const option = (value: string, label = value): SelectOption => ({ value, label });
+
+function useDismissOnOutside<T extends HTMLElement>(open: boolean, onDismiss: () => void) {
+  const layerRef = useRef<T | null>(null);
+  const dismissRef = useRef(onDismiss);
+  dismissRef.current = onDismiss;
+
+  useEffect(() => {
+    if (!open) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (layerRef.current && !layerRef.current.contains(event.target as Node)) dismissRef.current();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") dismissRef.current();
+    };
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  return layerRef;
+}
 
 function LuxurySelect({
   name,
@@ -866,6 +1232,7 @@ function LuxurySelect({
   const selectId = useId();
   const [internalValue, setInternalValue] = useState(defaultValue || options[0]?.value || "");
   const [open, setOpen] = useState(false);
+  const selectRef = useDismissOnOutside<HTMLDivElement>(open, () => setOpen(false));
   const selectedValue = value ?? internalValue;
   const selected = options.find((item) => item.value === selectedValue) || options[0];
 
@@ -885,7 +1252,7 @@ function LuxurySelect({
   };
 
   return (
-    <div className={`glass-select luxury-select ${open ? "open" : ""} ${tone}`}>
+    <div ref={selectRef} className={`glass-select luxury-select ${open ? "open" : ""} ${tone}`}>
       {name && <input type="hidden" name={name} value={selectedValue} />}
       <button
         className="glass-select-button"
@@ -918,10 +1285,11 @@ function LuxurySelect({
 function LanguageSwitcher({ compact = false }: { compact?: boolean }) {
   const { language, setLanguage, t } = useLanguage();
   const [open, setOpen] = useState(false);
+  const switcherRef = useDismissOnOutside<HTMLDivElement>(open, () => setOpen(false));
   const activeLanguage = languages.find((item) => item.code === language) || languages[0];
 
   return (
-    <div className={`language-switcher ${open ? "open" : ""} ${compact ? "compact" : ""}`}>
+    <div ref={switcherRef} className={`language-switcher ${open ? "open" : ""} ${compact ? "compact" : ""}`}>
       <button
         className="language-trigger"
         type="button"
@@ -966,7 +1334,7 @@ function ConfirmationModal({
 
   return (
     <aside className="request-confirmation open">
-      <button className="confirmation-scrim" type="button" aria-label="Cancel request" onClick={() => onDecision(false)} />
+      <button className="confirmation-scrim" type="button" aria-label={t("cancel")} onClick={() => onDecision(false)} />
       <section className="confirmation-panel" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
         <span className="confirmation-mark" aria-hidden="true"><Icon name="shield" /></span>
         <p className="eyebrow">{t("confirmRequest")}</p>
@@ -994,13 +1362,14 @@ function Header({
 }) {
   const { t } = useLanguage();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const headerRef = useDismissOnOutside<HTMLElement>(mobileMenuOpen, () => setMobileMenuOpen(false));
   const navigateMobile = (section: string) => {
     setMobileMenuOpen(false);
     onNavigate(section);
   };
 
   return (
-    <header className="site-header scrolled">
+    <header ref={headerRef} className="site-header scrolled">
       <button className="brand brand-button" type="button" onClick={() => onNavigate("home")}>
         <span className="brand-mark">A</span>
         <span>{settings.brandName}</span>
@@ -1008,6 +1377,7 @@ function Header({
       <nav className="desktop-nav" aria-label={t("primaryNavigation")}>
         <button type="button" onClick={() => onNavigate("residences")}><Icon name="building" />{t("residences")}</button>
         <button type="button" onClick={() => onNavigate("collections")}><Icon name="layers" />{t("collections")}</button>
+        <a href="#/explore-map"><Icon name="map" />{t("exploreMap")}</a>
         <a href="#/about"><Icon name="globe" />{t("about")}</a>
         <button type="button" onClick={() => onNavigate("concierge")}><Icon name="message" />{t("concierge")}</button>
         {!user && <a href="#/auth"><Icon name="lock" />{t("signIn")}</a>}
@@ -1045,6 +1415,7 @@ function Header({
         <LanguageSwitcher compact />
         <button type="button" onClick={() => navigateMobile("residences")}><Icon name="building" />{t("residences")}</button>
         <button type="button" onClick={() => navigateMobile("collections")}><Icon name="layers" />{t("collections")}</button>
+        <a href="#/explore-map" onClick={() => setMobileMenuOpen(false)}><Icon name="map" />{t("exploreMap")}</a>
         <a href="#/about" onClick={() => setMobileMenuOpen(false)}><Icon name="globe" />{t("about")}</a>
         <button type="button" onClick={() => navigateMobile("concierge")}><Icon name="message" />{t("concierge")}</button>
         {!user && <a href="#/auth" onClick={() => setMobileMenuOpen(false)}><Icon name="lock" />{t("signIn")}</a>}
@@ -1167,6 +1538,35 @@ function HomePage({
     go(`/detail/${slug}`);
   };
 
+  const openMapSearch = () => {
+    const destinationMap: Record<string, { country: string; city: string; area: string }> = {
+      all: { country: "Egypt", city: "Hurghada", area: "" },
+      riviera: { country: "France", city: "Nice", area: "French Riviera" },
+      dubai: { country: "United Arab Emirates", city: "Dubai", area: "Dubai Marina" },
+      maldives: { country: "Maldives", city: "Male", area: "Private Atoll" },
+      desert: { country: "United Arab Emirates", city: "Dubai", area: "Desert Reserve" },
+    };
+    const unitType: AccommodationType =
+      lifestyle === "Penthouse" || lifestyle === "Beachfront"
+        ? "apartment"
+        : lifestyle === "Investment"
+          ? "monthly"
+          : lifestyle === "Wellness"
+            ? "compound"
+            : "all";
+    const destinationTarget = destinationMap[destination] || destinationMap.all;
+    const params = new URLSearchParams({
+      country: destinationTarget.country,
+      city: destinationTarget.city,
+      area: destinationTarget.area,
+      type: unitType,
+      duration: unitType === "monthly" ? "monthly" : "any",
+      range: privacy === "A+" ? "15" : "35",
+      source: "home-filter",
+    });
+    go(`/explore-map?${params.toString()}`);
+  };
+
   const toggleCompare = (index: number) => {
     if (!requireAccess()) return;
     setComparison((current) =>
@@ -1235,6 +1635,9 @@ function HomePage({
             }}
           >
             <Icon name="spark" />{t("curate")}
+          </button>
+          <button type="button" onClick={openMapSearch}>
+            <Icon name="map" />{t("openMapSearch")}
           </button>
         </form>
       </section>
@@ -1670,6 +2073,399 @@ function DetailPage({ user, properties, id }: { user: Profile | null; properties
   );
 }
 
+function ExploreMapPanel({
+  rentals,
+  activeId,
+  onSelect,
+  areaCenter,
+  radiusKm,
+  onAreaCenterChange,
+  onRadiusChange,
+}: {
+  rentals: MapRental[];
+  activeId: string;
+  onSelect: (id: string) => void;
+  areaCenter: MapAreaCenter;
+  radiusKm: number;
+  onAreaCenterChange: (center: MapAreaCenter) => void;
+  onRadiusChange: (radiusKm: number) => void;
+}) {
+  const { t } = useLanguage();
+  const leafletNode = useRef<HTMLDivElement | null>(null);
+  const leafletMapRef = useRef<L.Map | null>(null);
+  const leafletMarkersRef = useRef<Map<string, L.Marker>>(new Map());
+  const areaCircleRef = useRef<L.Circle | null>(null);
+  const radiusHandleRef = useRef<L.Marker | null>(null);
+  const radiusHandleDraggingRef = useRef(false);
+  const areaCenterRef = useRef(areaCenter);
+  const radiusChangeRef = useRef(onRadiusChange);
+  areaCenterRef.current = areaCenter;
+  radiusChangeRef.current = onRadiusChange;
+  const activeRental = rentals.find((item) => item.id === activeId) || rentals[0];
+
+  const leafletIcon = (rental: MapRental, selected: boolean) => L.divIcon({
+    className: "explore-leaflet-marker-shell",
+    html: `<span class="explore-leaflet-marker${selected ? " active" : ""}">${rental.category === "studio" ? "S" : rental.category === "compound" ? "C" : rental.category === "monthly" ? "M" : "A"}</span>`,
+    iconSize: [36, 36],
+    iconAnchor: [18, 18],
+  });
+
+  useEffect(() => {
+    if (!leafletNode.current || rentals.length === 0) return;
+    const center: L.LatLngExpression = activeRental
+      ? [activeRental.lat, activeRental.lng]
+      : [27.2579, 33.8116];
+    const map = L.map(leafletNode.current, {
+      center,
+      zoom: 13,
+      zoomControl: true,
+      scrollWheelZoom: true,
+    });
+    leafletMapRef.current = map;
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    }).addTo(map);
+    const bounds = L.latLngBounds([]);
+    rentals.forEach((rental) => {
+      const marker = L.marker([rental.lat, rental.lng], {
+        title: rental.title,
+        icon: leafletIcon(rental, rental.id === activeId),
+      }).addTo(map);
+      marker.on("click", () => onSelect(rental.id));
+      marker.bindTooltip(rental.title, { direction: "top", offset: [0, -18] });
+      leafletMarkersRef.current.set(rental.id, marker);
+      bounds.extend([rental.lat, rental.lng]);
+    });
+    map.on("click", (event: L.LeafletMouseEvent) => {
+      onAreaCenterChange({ lat: event.latlng.lat, lng: event.latlng.lng });
+    });
+    if (rentals.length > 1) map.fitBounds(bounds, { padding: [44, 44], maxZoom: 14 });
+    const resizeTimer = window.setTimeout(() => map.invalidateSize(), 0);
+    return () => {
+      window.clearTimeout(resizeTimer);
+      leafletMarkersRef.current.clear();
+      areaCircleRef.current = null;
+      radiusHandleRef.current = null;
+      radiusHandleDraggingRef.current = false;
+      leafletMapRef.current = null;
+      map.remove();
+    };
+  }, [rentals, onSelect, onAreaCenterChange]);
+
+  useEffect(() => {
+    const map = leafletMapRef.current;
+    if (!map) return;
+    let shouldFitRange = !radiusHandleDraggingRef.current;
+    if (!areaCircleRef.current) {
+      areaCircleRef.current = L.circle([areaCenter.lat, areaCenter.lng], {
+        radius: radiusKm * 1000,
+        color: "#d4af37",
+        weight: 2,
+        opacity: 0.95,
+        fillColor: "#d4af37",
+        fillOpacity: 0.15,
+        dashArray: "8 7",
+        interactive: false,
+      }).addTo(map);
+      shouldFitRange = true;
+    } else {
+      areaCircleRef.current.setLatLng([areaCenter.lat, areaCenter.lng]);
+      areaCircleRef.current.setRadius(radiusKm * 1000);
+    }
+
+    const longitudeDelta = radiusKm / (111.32 * Math.max(Math.cos((areaCenter.lat * Math.PI) / 180), 0.01));
+    const handlePosition: L.LatLngExpression = [areaCenter.lat, areaCenter.lng + longitudeDelta];
+    if (!radiusHandleRef.current) {
+      radiusHandleRef.current = L.marker(handlePosition, {
+        draggable: true,
+        zIndexOffset: 900,
+        title: t("searchRange"),
+        icon: L.divIcon({
+          className: "explore-radius-handle-shell",
+          html: '<span class="explore-radius-handle"><span></span></span>',
+          iconSize: [30, 30],
+          iconAnchor: [15, 15],
+        }),
+      }).addTo(map);
+      radiusHandleRef.current.on("dragstart", () => {
+        radiusHandleDraggingRef.current = true;
+      });
+      radiusHandleRef.current.on("drag", (event: L.LeafletEvent) => {
+        const marker = event.target as L.Marker;
+        const center = areaCenterRef.current;
+        const nextRadius = map.distance([center.lat, center.lng], marker.getLatLng()) / 1000;
+        radiusChangeRef.current(Math.min(60, Math.max(5, Math.round(nextRadius))));
+      });
+      radiusHandleRef.current.on("dragend", () => {
+        radiusHandleDraggingRef.current = false;
+      });
+    } else if (!radiusHandleDraggingRef.current) {
+      radiusHandleRef.current.setLatLng(handlePosition);
+    }
+    if (shouldFitRange && areaCircleRef.current) {
+      map.fitBounds(areaCircleRef.current.getBounds(), { padding: [54, 54], maxZoom: 13, animate: true });
+    }
+  }, [areaCenter, radiusKm, t]);
+
+  useEffect(() => {
+    if (!leafletMapRef.current || !activeRental) return;
+    leafletMarkersRef.current.forEach((marker, rentalId) => {
+      const rental = rentals.find((item) => item.id === rentalId);
+      if (rental) marker.setIcon(leafletIcon(rental, rentalId === activeId));
+    });
+    leafletMapRef.current.panTo([activeRental.lat, activeRental.lng], { animate: true, duration: 0.45 });
+  }, [activeId, activeRental, rentals]);
+
+  return (
+    <section className="explore-map-panel">
+      <div className="explore-panel-heading">
+        <p className="eyebrow">{t("mapPanelTitle")}</p>
+        <span><Icon name="shield" />{t("excludedCommercial")}</span>
+      </div>
+      <div className="visual-map-canvas osm-map-canvas" aria-label={t("mapPanelTitle")}>
+        <div className="leaflet-map-surface" ref={leafletNode} />
+        <div className="explore-area-guide">
+          <strong>{t("chooseMapArea")}</strong>
+          <span>{t("chooseMapAreaHint")}</span>
+        </div>
+        <div className="explore-area-coordinates">
+          {t("selectedArea")}: {areaCenter.lat.toFixed(4)}, {areaCenter.lng.toFixed(4)} · {radiusKm} km
+        </div>
+        {activeRental && (
+          <article className="explore-map-card">
+            <img src={activeRental.image} alt={activeRental.title} />
+            <strong>{activeRental.title}</strong>
+            <p>{activeRental.summary}</p>
+            <span>{activeRental.address}</span>
+          </article>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ExploreMapPage({ user, routeQuery, onConfirmRequest }: { user: Profile | null; routeQuery: string; onConfirmRequest: (label: string) => Promise<boolean> }) {
+  const { t } = useLanguage();
+  const initialParams = useMemo(() => new URLSearchParams(routeQuery), [routeQuery]);
+  const initialCountry = initialParams.get("country") || "Egypt";
+  const initialCity = initialParams.get("city") || "Hurghada";
+  const initialArea = initialParams.get("area") || "";
+  const initialCategory = (initialParams.get("type") || "all") as AccommodationType;
+  const initialDuration = (initialParams.get("duration") || "any") as DurationType;
+  const initialRange = Number(initialParams.get("range")) || 35;
+  const initialRentals = useMemo(
+    () => filterIndependentRentals(curatedHurghadaRentals, initialArea, initialCategory, initialDuration, initialRange, initialCountry, initialCity),
+    [initialArea, initialCategory, initialDuration, initialRange, initialCountry, initialCity]
+  );
+  const [country, setCountry] = useState(initialCountry);
+  const [city, setCity] = useState(initialCity);
+  const [area, setArea] = useState(initialArea);
+  const [category, setCategory] = useState<AccommodationType>(initialCategory);
+  const [duration, setDuration] = useState<DurationType>(initialDuration);
+  const [radiusKm, setRadiusKm] = useState(initialRange);
+  const [rentals, setRentals] = useState<MapRental[]>(initialRentals);
+  const [activeId, setActiveId] = useState(() => initialRentals[0]?.id || "");
+  const [mapAreaCenter, setMapAreaCenter] = useState<MapAreaCenter>(() => {
+    const firstRental = initialRentals[0];
+    return firstRental ? { lat: firstRental.lat, lng: firstRental.lng } : { lat: 27.2579, lng: 33.8116 };
+  });
+  const [searched, setSearched] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+  const [messageTone, setMessageTone] = useState<"info" | "success" | "error">("info");
+
+  const geographicArea = useMemo(() => {
+    const latitudeDelta = radiusKm / 111.32;
+    const longitudeDelta = radiusKm / (111.32 * Math.max(Math.cos((mapAreaCenter.lat * Math.PI) / 180), 0.01));
+    return {
+      centerLatitude: Number(mapAreaCenter.lat.toFixed(6)),
+      centerLongitude: Number(mapAreaCenter.lng.toFixed(6)),
+      radiusKm,
+      bounds: {
+        north: Number((mapAreaCenter.lat + latitudeDelta).toFixed(6)),
+        south: Number((mapAreaCenter.lat - latitudeDelta).toFixed(6)),
+        east: Number((mapAreaCenter.lng + longitudeDelta).toFixed(6)),
+        west: Number((mapAreaCenter.lng - longitudeDelta).toFixed(6)),
+      },
+    };
+  }, [mapAreaCenter, radiusKm]);
+
+  async function executeSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const cleanCountry = country.trim() || "Egypt";
+    const cleanCity = city.trim() || "Hurghada";
+    const cleanArea = area.trim();
+    setLoading(true);
+    setMessageTone("info");
+    setMessage(t("searchingMap"));
+    const result = await getIndependentRentalResults(cleanCountry, cleanCity, cleanArea, category, duration, radiusKm);
+    const nextRentals = result.rentals;
+    setRentals(nextRentals);
+    setActiveId(nextRentals[0]?.id || "");
+    setSearched(true);
+    try {
+      const leadResult = await submitExploreLead({
+        source: "explore-map",
+        userId: user?.uid || "guest",
+        userEmail: user?.email || "",
+        searchedArea: `${cleanCountry} / ${cleanCity}${cleanArea ? ` / ${cleanArea}` : ""} / ${radiusKm}km / ${duration}`,
+        accommodationType: `${category} / ${duration}`,
+        resultCount: nextRentals.length,
+        excludedCommercial: true,
+        geographicArea,
+      });
+      setMessageTone(leadResult.synced ? "success" : "info");
+      setMessage(result.usedFallback ? t("apiFallbackNotice") : leadResult.synced ? t("crmLeadLogged") : t("crmLeadFailed"));
+    } catch (error) {
+      setMessageTone("info");
+      setMessage(result.usedFallback ? t("apiFallbackNotice") : t("crmLeadFailed"));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function requestDeal(rental: MapRental) {
+    if (!(await onConfirmRequest(`deal request for ${rental.title}`))) return;
+    try {
+      await submitRentalRequest({
+        source: "explore-map-deal",
+        name: user?.name || "",
+        email: user?.email || "",
+        purpose: "Make a deal for selected independent rental",
+        desiredResidence: rental.title,
+        request: `${rental.title} / ${rental.address} / ${rental.category} / ${rental.priceLabel}`,
+        preferences: `Area: ${rental.area}. Bedrooms: ${rental.bedrooms}. Commercial hotels/resorts excluded.`,
+      });
+      setMessageTone("success");
+      setMessage(t("dealRequestSent"));
+    } catch (error) {
+      setMessageTone("error");
+      setMessage(error instanceof Error ? `${t("dealRequestFailed")} ${error.message}` : t("dealRequestFailed"));
+    }
+  }
+
+  async function sendSearchRequest() {
+    if (!(await onConfirmRequest(`map search request for ${country} ${city}`))) return;
+    try {
+      await submitRentalRequest({
+        source: "explore-map-filter-search",
+        name: user?.name || "",
+        email: user?.email || "",
+        purpose: "Search request from interactive map filters",
+        desiredResidence: `${country} / ${city}${area ? ` / ${area}` : ""}`,
+        request: `Country: ${country}. City: ${city}. Area: ${area || "Any"}. Selected map center: ${geographicArea.centerLatitude}, ${geographicArea.centerLongitude}. Radius: ${geographicArea.radiusKm}km. Bounds: N ${geographicArea.bounds.north}, S ${geographicArea.bounds.south}, E ${geographicArea.bounds.east}, W ${geographicArea.bounds.west}. Unit type: ${category}. Duration: ${duration}.`,
+        preferences: "Client selected this geographical living area directly on the interactive map. Independent residential/touristic units only; hotels and resorts excluded.",
+      });
+      setMessageTone("success");
+      setMessage(t("searchRequestSent"));
+    } catch (error) {
+      setMessageTone("error");
+      setMessage(error instanceof Error ? `${t("searchRequestFailed")} ${error.message}` : t("searchRequestFailed"));
+    }
+  }
+
+  return (
+    <main className="explore-map-page has-results">
+      <section className="explore-search-hero">
+        <p className="eyebrow">{t("independentOnly")}</p>
+        <h1>{t("mapSearchHeadline")}</h1>
+        <p>{t("mapSearchCopy")}</p>
+        <form className="explore-search-form" onSubmit={executeSearch}>
+          <label>
+            <span>{t("country")}</span>
+            <input name="country" value={country} onChange={(event) => setCountry(event.target.value)} placeholder={t("countryPlaceholder")} />
+          </label>
+          <label>
+            <span>{t("city")}</span>
+            <input name="city" value={city} onChange={(event) => setCity(event.target.value)} placeholder={t("cityPlaceholder")} />
+          </label>
+          <label>
+            <span>{t("areaNeighborhood")}</span>
+            <input
+              name="area"
+              value={area}
+              onChange={(event) => setArea(event.target.value)}
+              list="hurghada-areas"
+              placeholder={t("searchAreaPlaceholder")}
+            />
+            <datalist id="hurghada-areas">
+              {hurghadaAreas.map((item) => <option value={item} key={item} />)}
+            </datalist>
+          </label>
+          <label>
+            <span>{t("accommodationType")}</span>
+            <select value={category} onChange={(event) => setCategory(event.target.value as AccommodationType)}>
+              {accommodationOptions.map((optionItem) => (
+                <option value={optionItem.value} key={optionItem.value}>{t(optionItem.labelKey)}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>{t("duration")}</span>
+            <select value={duration} onChange={(event) => setDuration(event.target.value as DurationType)}>
+              {durationOptions.map((optionItem) => (
+                <option value={optionItem.value} key={optionItem.value}>{t(optionItem.labelKey)}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>{t("searchRange")}: {radiusKm} km</span>
+            <input className="range-input" type="range" min="5" max="60" step="5" value={radiusKm} onChange={(event) => setRadiusKm(Number(event.target.value))} />
+          </label>
+          <div className="explore-form-actions">
+            <button className="explore-search-button" type="submit" disabled={loading}>
+              <span className="explore-action-icon"><Icon name="search" /></span>
+              <span className="explore-action-copy"><strong>{loading ? t("searchingMap") : t("searchMap")}</strong><small>{t("searchMapDetail")}</small></span>
+              <Icon name="arrowRight" />
+            </button>
+            <button className="explore-request-button" type="button" onClick={sendSearchRequest}>
+              <span className="explore-action-icon"><Icon name="message" /></span>
+              <span className="explore-action-copy"><strong>{t("sendSearchRequest")}</strong><small>{t("sendRequestDetail")}</small></span>
+              <Icon name="arrowRight" />
+            </button>
+          </div>
+        </form>
+        <p className={`auth-message ${message ? messageTone : ""}`}>{message}</p>
+      </section>
+
+      {searched && (
+        <section className="explore-results-shell">
+          <aside className="explore-list-panel">
+            <div className="explore-panel-heading">
+              <p className="eyebrow">{t("sidePanelTitle")}</p>
+              <strong>{rentals.length}</strong>
+            </div>
+            {rentals.length === 0 && <p className="explore-empty">{t("noMapResults")}</p>}
+            {rentals.map((rental) => (
+              <article className={`explore-property-card ${rental.id === activeId ? "active" : ""}`} key={rental.id}>
+                <button className="explore-property-main" type="button" onClick={() => setActiveId(rental.id)}>
+                  <img src={rental.image} alt={rental.title} />
+                  <span>{t(rental.category === "studio" ? "studios" : rental.category === "monthly" ? "monthlyRentals" : rental.category === "compound" ? "compounds" : "apartments")}</span>
+                  <strong>{rental.title}</strong>
+                  <p>{rental.summary}</p>
+                  <em>{t("exactAddress")}: {rental.address}</em>
+                  <small>{rental.bedrooms} BR / {rental.priceLabel}</small>
+                </button>
+                <button className="explore-deal-button" type="button" onClick={() => requestDeal(rental)}><Icon name="check" />{t("interestedDeal")}</button>
+              </article>
+            ))}
+          </aside>
+          <ExploreMapPanel
+            rentals={rentals}
+            activeId={activeId}
+            onSelect={setActiveId}
+            areaCenter={mapAreaCenter}
+            radiusKm={radiusKm}
+            onAreaCenterChange={setMapAreaCenter}
+            onRadiusChange={setRadiusKm}
+          />
+        </section>
+      )}
+    </main>
+  );
+}
+
 function AuthPage({ onUser }: { onUser: (user: Profile | null) => void }) {
   const { t } = useLanguage();
   const [mode, setMode] = useState<"signin" | "signup" | "verify">("signin");
@@ -1799,6 +2595,9 @@ function AuthPage({ onUser }: { onUser: (user: Profile | null) => void }) {
 
 function ProfilePage({ user, onUser }: { user: Profile | null; onUser: (user: Profile | null) => void }) {
   const { t } = useLanguage();
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  const [messageTone, setMessageTone] = useState<"info" | "success" | "error">("info");
   useEffect(() => {
     if (!user) go("/auth");
   }, [user]);
@@ -1808,19 +2607,42 @@ function ProfilePage({ user, onUser }: { user: Profile | null; onUser: (user: Pr
       <section className="profile-card">
         <div className="profile-hero-row">
           <div className="profile-avatar large" style={user.photoURL ? { backgroundImage: `url("${user.photoURL}")` } : undefined}>{user.photoURL ? "" : initials(user.name || user.email)}</div>
-          <div><p className="eyebrow">{t("privateProfile")}</p><h1>{user.name}</h1><p className="profile-status">{user.emailVerified ? t("verifiedAccount") : t("verificationPending")}</p></div>
+          <div className="profile-heading">
+            <p className="eyebrow">{t("privateProfile")}</p>
+            <h1>{user.name || user.email}</h1>
+            <p className={`profile-status ${user.emailVerified ? "verified" : "pending"}`}>{user.emailVerified ? t("verifiedAccount") : t("verificationPending")}</p>
+          </div>
+        </div>
+        <div className="profile-summary">
+          <div><span>{t("email")}</span><strong>{user.email}</strong></div>
+          <div><span>{t("intent")}</span><strong>{user.intent || t("rent")}</strong></div>
         </div>
         <form className="profile-form" onSubmit={async (event) => {
           event.preventDefault();
           const data = new FormData(event.currentTarget);
-          onUser(await updateProfileData({ name: String(data.get("name")), intent: String(data.get("intent")), photoURL: String(data.get("photoURL")) }));
+          setSaving(true);
+          setMessageTone("info");
+          setMessage(t("savingProfile"));
+          try {
+            onUser(await updateProfileData({ name: String(data.get("name")), intent: String(data.get("intent")), photoURL: String(data.get("photoURL")) }));
+            setMessageTone("success");
+            setMessage(t("profileSaved"));
+          } catch (error) {
+            setMessageTone("error");
+            setMessage(error instanceof Error ? error.message : t("profileSaveFailed"));
+          } finally {
+            setSaving(false);
+          }
         }}>
           <label>{t("name")}<input name="name" defaultValue={user.name} /></label>
           <label>{t("email")}<input disabled defaultValue={user.email} /></label>
           <label>{t("profileImageUrl")}<input name="photoURL" defaultValue={user.photoURL || ""} /></label>
           <label>{t("intent")}<select name="intent" defaultValue={user.intent || "Rent"}><option value="Buy">{t("buy")}</option><option value="Rent">{t("rent")}</option><option value="Invest">{t("invest")}</option><option value="List a property">{t("listAProperty")}</option></select></label>
-          <button type="submit"><Icon name="save" />{t("saveProfile")}</button>
-          <button type="button" onClick={async () => { await logout(); onUser(null); go("/auth"); }}><Icon name="x" />{t("logOut")}</button>
+          <div className="profile-actions">
+            <button className="profile-save-button" type="submit" disabled={saving}><Icon name="save" />{saving ? t("savingProfile") : t("saveProfile")}</button>
+            <button className="profile-logout-button" type="button" onClick={async () => { await logout(); onUser(null); go("/auth"); }}><Icon name="x" />{t("logOut")}</button>
+          </div>
+          <p className={`auth-message ${message ? messageTone : ""}`}>{message}</p>
         </form>
       </section>
     </main>
@@ -1828,6 +2650,7 @@ function ProfilePage({ user, onUser }: { user: Profile | null; onUser: (user: Pr
 }
 
 function AboutPage({ id }: { id: string }) {
+  const { language } = useLanguage();
   useEffect(() => {
     if (id !== "contact") return;
     window.setTimeout(() => {
@@ -1835,124 +2658,117 @@ function AboutPage({ id }: { id: string }) {
     }, 120);
   }, [id]);
 
-  const agencyServices = [
-    "Private villas",
-    "Beachfront residences",
-    "Penthouses",
-    "Tourist rental units",
-    "Resort properties",
-    "Private island and destination properties",
-    "Investment residences",
-  ];
-  const marketingServices = [
-    "Project presentation",
-    "Unit listing and positioning",
-    "Buyer and investor lead generation",
-    "Luxury property content and visual presentation",
-    "Development campaign support",
-    "Private advisor inquiry handling",
-    "International client communication",
-  ];
-  const platformServices = [
-    "Unit listing for rental management",
-    "Unit listing for sale",
-    "Private advisor requests",
-    "Concierge and rental inquiries",
-    "Owner and client communication",
-    "Property status tracking",
-    "Yield and occupancy indicators",
-    "Premium image galleries",
-    "Currency and payment preference display",
-    "Admin-managed listing updates",
-  ];
-  const websiteServices = [
-    "Curated luxury residence listings",
-    "Advanced property search by destination, lifestyle, and privacy level",
-    "Featured collections such as waterfront villas, penthouses, and investment residences",
-    "Private advisor request forms",
-    "Concierge request forms for viewings, rental reservations, and unit explanations",
-    "Property comparison tools",
-    "Currency display options",
-    "Owner listing and unit management features",
-    "Admin review of advisor and rental requests",
-    "Property image gallery and detailed unit pages",
-    "WhatsApp Business, private email, and premium call contact options",
-  ];
+  const content = {
+    en: {
+      companyDescription: "Company Description", companyName: "Company Name", servicesTitle: "Services We Offer",
+      servicesHeadline: "Luxury, tourism, project, and development representation.", agencyTitle: "Luxury and Tourist Property Agency",
+      agencyIntro: "We represent luxury and tourist properties for sale, rent, and investment, including:",
+      agencyOutro: "We assist clients with property discovery, private viewings, rental reservations, purchase inquiries, and tailored investment recommendations.",
+      projectTitle: "Major Project Representation",
+      projectText1: "We act as agents and marketing partners for major real estate projects, including residential compounds, resort developments, branded residences, and high-end mixed-use projects.",
+      projectText2: "Our role includes presenting the project to qualified clients, explaining unit types and investment value, supporting inquiries, and helping developers reach buyers, investors, and rental operators.",
+      marketingTitle: "Real Estate Development Marketing", marketingIntro: "We provide marketing support for real estate development services, including:",
+      platformTitle: "Rental Management and Sale Listing Platform",
+      platformText1: "We provide a reliable platform for owners who want to list their units with us for rental management or sale.",
+      platformText2: "Owners can submit their unit details, images, location, price, rental or sale objective, and preferred management arrangement. Our team reviews each listing, prepares it for presentation, and connects it with suitable renters, buyers, or investors.",
+      platformIntro: "Our platform supports:", websiteTitle: "Website Services", websiteHeadline: "The website offers:",
+      contactTitle: "Contact Information", contactHeadline: "Contact details will be completed later.", phone: "Phone / WhatsApp", office: "Office Address", social: "Social Media",
+      copy: [
+        "_______________________________ is a specialized real estate agency and marketing platform focused on luxury, tourist, and investment properties. We represent owners, developers, investors, and clients seeking premium real estate opportunities in high-value destinations.",
+        "Our work combines private property advisory, luxury rental management, real estate sales, major project representation, and development marketing. We provide a trusted platform where exclusive units can be presented professionally, matched with qualified buyers or tenants, and managed through a discreet advisory process.",
+        "We operate as agents for luxury villas, penthouses, tourist residences, private estates, branded developments, and major real estate projects. Our goal is to connect premium properties with the right audience through refined presentation, accurate listing management, private client communication, and strategic marketing.",
+      ],
+      agency: ["Private villas", "Beachfront residences", "Penthouses", "Tourist rental units", "Resort properties", "Private island and destination properties", "Investment residences"],
+      marketing: ["Project presentation", "Unit listing and positioning", "Buyer and investor lead generation", "Luxury property content and visual presentation", "Development campaign support", "Private advisor inquiry handling", "International client communication"],
+      platform: ["Unit listing for rental management", "Unit listing for sale", "Private advisor requests", "Concierge and rental inquiries", "Owner and client communication", "Property status tracking", "Yield and occupancy indicators", "Premium image galleries", "Currency and payment preference display", "Admin-managed listing updates"],
+      website: ["Curated luxury residence listings", "Advanced property search by destination, lifestyle, and privacy level", "Featured collections such as waterfront villas, penthouses, and investment residences", "Private advisor request forms", "Concierge request forms for viewings, rental reservations, and unit explanations", "Property comparison tools", "Currency display options", "Owner listing and unit management features", "Admin review of advisor and rental requests", "Property image gallery and detailed unit pages", "WhatsApp Business, private email, and premium call contact options"],
+    },
+    de: {
+      companyDescription: "Unternehmensbeschreibung", companyName: "Firmenname", servicesTitle: "Unsere Leistungen",
+      servicesHeadline: "Vertretung fuer Luxusimmobilien, Tourismusprojekte und Entwicklungen.", agencyTitle: "Agentur fuer Luxus- und Ferienimmobilien",
+      agencyIntro: "Wir vertreten Luxus- und Ferienimmobilien zum Verkauf, zur Vermietung und als Kapitalanlage, darunter:",
+      agencyOutro: "Wir unterstuetzen Kunden bei der Immobiliensuche, privaten Besichtigungen, Mietreservierungen, Kaufanfragen und individuellen Anlageempfehlungen.",
+      projectTitle: "Vertretung grosser Projekte", projectText1: "Wir agieren als Vertreter und Marketingpartner fuer grosse Immobilienprojekte, darunter Wohnanlagen, Resortentwicklungen, Markenresidenzen und hochwertige Mischnutzungsprojekte.",
+      projectText2: "Wir praesentieren Projekte qualifizierten Kunden, erklaeren Einheitentypen und Investitionswert, begleiten Anfragen und helfen Entwicklern, Kaeufer, Investoren und Vermietungsbetreiber zu erreichen.",
+      marketingTitle: "Marketing fuer Immobilienentwicklungen", marketingIntro: "Wir bieten Marketingunterstuetzung fuer Immobilienentwicklungen, darunter:",
+      platformTitle: "Plattform fuer Vermietungsmanagement und Verkauf", platformText1: "Wir bieten Eigentuemerinnen und Eigentuemer eine verlaessliche Plattform, um Einheiten zur Vermietungsverwaltung oder zum Verkauf anzubieten.",
+      platformText2: "Eigentuemer koennen Einheitendaten, Bilder, Lage, Preis, Miet- oder Verkaufsziel und die gewuenschte Verwaltung einreichen. Unser Team prueft jedes Angebot, bereitet es professionell auf und verbindet es mit passenden Mietern, Kaeufern oder Investoren.",
+      platformIntro: "Unsere Plattform unterstuetzt:", websiteTitle: "Website-Leistungen", websiteHeadline: "Die Website bietet:",
+      contactTitle: "Kontaktinformationen", contactHeadline: "Die Kontaktdaten werden spaeter ergaenzt.", phone: "Telefon / WhatsApp", office: "Bueroadresse", social: "Soziale Medien",
+      copy: ["_______________________________ ist eine spezialisierte Immobilienagentur und Marketingplattform fuer Luxus-, Ferien- und Anlageimmobilien. Wir vertreten Eigentuemer, Entwickler, Investoren und Kunden, die hochwertige Chancen an erstklassigen Standorten suchen.", "Unsere Arbeit verbindet private Immobilienberatung, Luxusvermietung, Verkauf, Projektvertretung und Entwicklungsmarketing. Exklusive Einheiten werden professionell praesentiert, mit qualifizierten Kaeufern oder Mietern zusammengebracht und diskret betreut.", "Wir vertreten Luxusvillen, Penthouses, Ferienresidenzen, private Anwesen, Markenentwicklungen und grosse Immobilienprojekte. Unser Ziel ist es, Premiumimmobilien durch praezise Praesentation, korrekte Angebotsverwaltung, private Kommunikation und strategisches Marketing mit der richtigen Zielgruppe zu verbinden."],
+      agency: ["Private Villen", "Residenzen am Strand", "Penthouses", "Ferienmieteinheiten", "Resortimmobilien", "Private Insel- und Destinationseigentuemmer", "Anlageresidenzen"],
+      marketing: ["Projektpraesentation", "Positionierung und Listung von Einheiten", "Gewinnung von Kaeufer- und Investorenkontakten", "Inhalte und visuelle Praesentation fuer Luxusimmobilien", "Unterstuetzung von Entwicklungskampagnen", "Bearbeitung privater Beratungsanfragen", "Internationale Kundenkommunikation"],
+      platform: ["Listung fuer Vermietungsmanagement", "Listung zum Verkauf", "Private Beratungsanfragen", "Concierge- und Mietanfragen", "Kommunikation mit Eigentuemer und Kunden", "Statusverfolgung", "Rendite- und Belegungsindikatoren", "Premium-Bildergalerien", "Anzeige von Waehrungs- und Zahlungswuenschen", "Vom Admin verwaltete Aktualisierungen"],
+      website: ["Kuratierte Luxusresidenzen", "Erweiterte Suche nach Zielort, Lebensstil und Privatsphaere", "Kollektionen mit Villen am Wasser, Penthouses und Anlageresidenzen", "Formulare fuer private Beratung", "Concierge-Formulare fuer Besichtigungen und Reservierungen", "Immobilienvergleich", "Waehrungsoptionen", "Eigentuemer- und Einheitenverwaltung", "Adminpruefung von Anfragen", "Bildergalerien und detaillierte Einheitenseiten", "Kontakt per WhatsApp Business, privater E-Mail und Premium-Anruf"],
+    },
+    it: {
+      companyDescription: "Descrizione dell'azienda", companyName: "Nome dell'azienda", servicesTitle: "I nostri servizi",
+      servicesHeadline: "Rappresentanza per immobili di lusso, turismo, progetti e sviluppo.", agencyTitle: "Agenzia per immobili di lusso e turistici",
+      agencyIntro: "Rappresentiamo immobili di lusso e turistici per vendita, affitto e investimento, tra cui:", agencyOutro: "Assistiamo i clienti nella ricerca, nelle visite private, nelle prenotazioni, nelle richieste di acquisto e nelle raccomandazioni di investimento personalizzate.",
+      projectTitle: "Rappresentanza di grandi progetti", projectText1: "Operiamo come agenti e partner di marketing per grandi progetti immobiliari, inclusi complessi residenziali, resort, residenze di marca e progetti misti di fascia alta.",
+      projectText2: "Presentiamo il progetto a clienti qualificati, spieghiamo tipologie e valore d'investimento, gestiamo le richieste e aiutiamo gli sviluppatori a raggiungere acquirenti, investitori e operatori di locazione.",
+      marketingTitle: "Marketing per lo sviluppo immobiliare", marketingIntro: "Forniamo supporto marketing per lo sviluppo immobiliare, tra cui:",
+      platformTitle: "Piattaforma per gestione affitti e vendita", platformText1: "Offriamo una piattaforma affidabile ai proprietari che desiderano affidare a noi la gestione degli affitti o la vendita delle loro unita.",
+      platformText2: "I proprietari possono inviare dettagli, immagini, posizione, prezzo, obiettivo e modalita di gestione. Il nostro team verifica ogni annuncio, lo prepara per la presentazione e lo collega a inquilini, acquirenti o investitori idonei.",
+      platformIntro: "La nostra piattaforma supporta:", websiteTitle: "Servizi del sito", websiteHeadline: "Il sito offre:", contactTitle: "Informazioni di contatto", contactHeadline: "I contatti saranno completati in seguito.", phone: "Telefono / WhatsApp", office: "Indirizzo ufficio", social: "Social media",
+      copy: ["_______________________________ e un'agenzia immobiliare specializzata e una piattaforma di marketing dedicata a immobili di lusso, turistici e d'investimento. Rappresentiamo proprietari, sviluppatori, investitori e clienti alla ricerca di opportunita premium.", "Il nostro lavoro unisce consulenza privata, gestione di affitti di lusso, vendite, rappresentanza di grandi progetti e marketing dello sviluppo. Le unita esclusive vengono presentate professionalmente e abbinate a clienti qualificati con un processo discreto.", "Operiamo come agenti per ville di lusso, attici, residenze turistiche, tenute private, sviluppi di marca e grandi progetti. Colleghiamo gli immobili premium al pubblico giusto attraverso presentazione curata, gestione accurata, comunicazione privata e marketing strategico."],
+      agency: ["Ville private", "Residenze fronte mare", "Attici", "Unita per affitti turistici", "Proprieta in resort", "Proprieta su isole private e destinazioni esclusive", "Residenze da investimento"],
+      marketing: ["Presentazione del progetto", "Posizionamento e pubblicazione delle unita", "Generazione di contatti di acquirenti e investitori", "Contenuti e presentazione visiva di lusso", "Supporto alle campagne di sviluppo", "Gestione delle richieste di consulenza privata", "Comunicazione con clienti internazionali"],
+      platform: ["Pubblicazione per gestione affitti", "Pubblicazione per vendita", "Richieste di consulenza privata", "Richieste concierge e affitto", "Comunicazione con proprietari e clienti", "Monitoraggio dello stato", "Indicatori di rendimento e occupazione", "Gallerie di immagini premium", "Preferenze di valuta e pagamento", "Aggiornamenti gestiti dall'amministratore"],
+      website: ["Annunci curati di residenze di lusso", "Ricerca avanzata per destinazione, stile di vita e privacy", "Collezioni di ville sul mare, attici e residenze da investimento", "Moduli per consulenza privata", "Moduli concierge per visite e prenotazioni", "Strumenti di confronto", "Opzioni di valuta", "Funzioni per proprietari e gestione unita", "Revisione amministrativa delle richieste", "Gallerie e pagine dettagliate", "Contatto tramite WhatsApp Business, email privata e chiamata premium"],
+    },
+  }[language];
 
   return (
     <main className="page-shell about-page">
       <section className="about-hero section">
-        <p className="eyebrow">Company Description</p>
-        <h1>Company Name: _______________________________</h1>
+        <p className="eyebrow">{content.companyDescription}</p>
+        <h1>{content.companyName}: _______________________________</h1>
         <div className="about-copy">
-          <p>
-            _______________________________ is a specialized real estate agency and marketing platform focused on luxury,
-            tourist, and investment properties. We represent owners, developers, investors, and clients seeking premium
-            real estate opportunities in high-value destinations.
-          </p>
-          <p>
-            Our work combines private property advisory, luxury rental management, real estate sales, major project
-            representation, and development marketing. We provide a trusted platform where exclusive units can be presented
-            professionally, matched with qualified buyers or tenants, and managed through a discreet advisory process.
-          </p>
-          <p>
-            We operate as agents for luxury villas, penthouses, tourist residences, private estates, branded developments,
-            and major real estate projects. Our goal is to connect premium properties with the right audience through refined
-            presentation, accurate listing management, private client communication, and strategic marketing.
-          </p>
+          {content.copy.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
         </div>
       </section>
 
       <section className="section about-services">
         <div className="section-heading">
-          <p className="eyebrow">Services We Offer</p>
-          <h2>Luxury, tourism, project, and development representation.</h2>
+          <p className="eyebrow">{content.servicesTitle}</p>
+          <h2>{content.servicesHeadline}</h2>
         </div>
         <article className="about-card">
-          <h3>Luxury and Tourist Property Agency</h3>
-          <p>We represent luxury and tourist properties for sale, rent, and investment, including:</p>
-          <ul>{agencyServices.map((item) => <li key={item}>{item}</li>)}</ul>
-          <p>We assist clients with property discovery, private viewings, rental reservations, purchase inquiries, and tailored investment recommendations.</p>
+          <h3>{content.agencyTitle}</h3><p>{content.agencyIntro}</p>
+          <ul>{content.agency.map((item) => <li key={item}>{item}</li>)}</ul><p>{content.agencyOutro}</p>
         </article>
         <article className="about-card">
-          <h3>Major Project Representation</h3>
-          <p>We act as agents and marketing partners for major real estate projects, including residential compounds, resort developments, branded residences, and high-end mixed-use projects.</p>
-          <p>Our role includes presenting the project to qualified clients, explaining unit types and investment value, supporting inquiries, and helping developers reach buyers, investors, and rental operators.</p>
+          <h3>{content.projectTitle}</h3><p>{content.projectText1}</p><p>{content.projectText2}</p>
         </article>
         <article className="about-card">
-          <h3>Real Estate Development Marketing</h3>
-          <p>We provide marketing support for real estate development services, including:</p>
-          <ul>{marketingServices.map((item) => <li key={item}>{item}</li>)}</ul>
+          <h3>{content.marketingTitle}</h3><p>{content.marketingIntro}</p>
+          <ul>{content.marketing.map((item) => <li key={item}>{item}</li>)}</ul>
         </article>
         <article className="about-card">
-          <h3>Rental Management and Sale Listing Platform</h3>
-          <p>We provide a reliable platform for owners who want to list their units with us for rental management or sale.</p>
-          <p>Owners can submit their unit details, images, location, price, rental or sale objective, and preferred management arrangement. Our team reviews each listing, prepares it for presentation, and connects it with suitable renters, buyers, or investors.</p>
-          <p>Our platform supports:</p>
-          <ul>{platformServices.map((item) => <li key={item}>{item}</li>)}</ul>
+          <h3>{content.platformTitle}</h3><p>{content.platformText1}</p><p>{content.platformText2}</p><p>{content.platformIntro}</p>
+          <ul>{content.platform.map((item) => <li key={item}>{item}</li>)}</ul>
         </article>
       </section>
 
       <section className="section about-website">
         <div className="section-heading">
-          <p className="eyebrow">Website Services</p>
-          <h2>The website offers:</h2>
+          <p className="eyebrow">{content.websiteTitle}</p><h2>{content.websiteHeadline}</h2>
         </div>
-        <ul className="about-feature-list">{websiteServices.map((item) => <li key={item}>{item}</li>)}</ul>
+        <ul className="about-feature-list">{content.website.map((item) => <li key={item}>{item}</li>)}</ul>
       </section>
 
       <section className="section about-contact" id="contact-info">
         <div className="section-heading">
-          <p className="eyebrow">Contact Information</p>
-          <h2>Contact details will be completed later.</h2>
+          <p className="eyebrow">{content.contactTitle}</p><h2>{content.contactHeadline}</h2>
         </div>
         <dl>
-          <div><dt>Company Name</dt><dd>_______________________________</dd></div>
-          <div><dt>Phone / WhatsApp</dt><dd>_______________________________</dd></div>
+          <div><dt>{content.companyName}</dt><dd>_______________________________</dd></div>
+          <div><dt>{content.phone}</dt><dd>_______________________________</dd></div>
           <div><dt>Email</dt><dd>_______________________________</dd></div>
           <div><dt>Website</dt><dd>_______________________________</dd></div>
-          <div><dt>Office Address</dt><dd>_______________________________</dd></div>
-          <div><dt>Social Media</dt><dd>_______________________________</dd></div>
+          <div><dt>{content.office}</dt><dd>_______________________________</dd></div>
+          <div><dt>{content.social}</dt><dd>_______________________________</dd></div>
         </dl>
       </section>
     </main>
@@ -2364,6 +3180,7 @@ export default function App() {
 
   useEffect(() => {
     document.title = `${settings.brandName} | ${t("privateGlobalResidences")}`;
+    document.documentElement.lang = language;
   }, [settings.brandName, language]);
 
   const content =
@@ -2371,6 +3188,8 @@ export default function App() {
       <AuthPage onUser={setUser} />
     ) : currentRoute.page === "about" ? (
       <AboutPage id={currentRoute.id} />
+    ) : currentRoute.page === "explore-map" ? (
+      <ExploreMapPage user={user} routeQuery={currentRoute.query} onConfirmRequest={confirmRequestSend} />
     ) : currentRoute.page === "detail" ? (
       <DetailPage user={user} properties={properties} id={currentRoute.id} />
     ) : currentRoute.page === "profile" ? (
@@ -2405,7 +3224,7 @@ export default function App() {
   return (
     <LanguageContext.Provider value={languageContext}>
       <Header user={user} settings={settings} onNavigate={navigateSection} onContact={openContactPage} />
-      <div className={`page-transition ${transitioning ? "leaving" : "entered"}`} key={`${currentRoute.page}-${currentRoute.id}`}>
+      <div className={`page-transition ${transitioning ? "leaving" : "entered"}`} key={`${currentRoute.page}-${currentRoute.id}-${currentRoute.query}`}>
         {content}
       </div>
       <GlobalFooter settings={settings} onNavigate={navigateSection} onAdvisor={openAdvisor} />
