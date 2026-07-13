@@ -435,6 +435,8 @@ const translations = {
     uploadedAndSaved: "Gallery images uploaded to Firebase Storage and unit saved.",
     unitSaved: "Unit saved successfully.",
     unitSaveError: "Could not save unit changes.",
+    unitRemoved: "Unit removed successfully.",
+    unitRemoveError: "Could not remove this unit.",
   },
   de: {
     primaryNavigation: "Hauptnavigation",
@@ -750,6 +752,8 @@ const translations = {
     explanation: "Erklärung",
     saveUnit: "Einheit speichern",
     removeUnit: "Einheit entfernen",
+    unitRemoved: "Einheit erfolgreich entfernt.",
+    unitRemoveError: "Diese Einheit konnte nicht entfernt werden.",
     seedDefaults: "Standardwerte laden",
     savingUnit: "Einheit wird gespeichert...",
     uploadedAndSaved: "Galeriebilder wurden in Firebase Storage hochgeladen und die Einheit gespeichert.",
@@ -1070,6 +1074,8 @@ const translations = {
     explanation: "Spiegazione",
     saveUnit: "Salva unita",
     removeUnit: "Rimuovi unita",
+    unitRemoved: "Unita rimossa con successo.",
+    unitRemoveError: "Impossibile rimuovere questa unita.",
     seedDefaults: "Carica predefiniti",
     savingUnit: "Salvataggio unita...",
     uploadedAndSaved: "Immagini galleria caricate su Firebase Storage e unita salvata.",
@@ -3089,6 +3095,8 @@ function AdminPage({
   const [inboxMessage, setInboxMessage] = useState("");
   const [section, setSection] = useState<"overview" | "listings" | "inbox" | "settings">("overview");
   const [listingSearch, setListingSearch] = useState("");
+  const [listingMessage, setListingMessage] = useState("");
+  const [deletingSlug, setDeletingSlug] = useState("");
 
   const refreshRequests = async () => {
     const nextRequests = await getManagedRequests();
@@ -3119,6 +3127,27 @@ function AdminPage({
     };
     setProperties(await saveProperty(draft));
     go(`/admin-unit/${slug}`);
+  }
+
+  async function removeUnit(property: Property) {
+    if (!(await onConfirmRequest({
+      eyebrow: t("confirmAction"),
+      title: `${t("removeUnit")}: ${property.name}`,
+      description: t("deleteUnitConfirmation"),
+      confirmLabel: t("confirmDelete"),
+      tone: "danger",
+      icon: "trash",
+    }))) return;
+    setDeletingSlug(property.slug);
+    setListingMessage("");
+    try {
+      setProperties(await deleteProperty(property.slug));
+      setListingMessage(`${property.name}: ${t("unitRemoved")}`);
+    } catch (error) {
+      setListingMessage(error instanceof Error ? `${t("unitRemoveError")} ${error.message}` : t("unitRemoveError"));
+    } finally {
+      setDeletingSlug("");
+    }
   }
 
   async function changeRequestStatus(request: ManagedRequest, status: string) {
@@ -3169,13 +3198,17 @@ function AdminPage({
           <label className="admin-search"><Icon name="search" /><input value={listingSearch} onChange={(event) => setListingSearch(event.target.value)} placeholder={`${t("totalListings")}...`} /></label>
           <button type="button" onClick={createUnit}><Icon name="plus" />{t("addNewUnit")}</button>
         </div>
+        {listingMessage && <p className="auth-message admin-listing-message">{listingMessage}</p>}
         {visibleProperties.map((item) => (
           <article className="admin-listing" key={item.slug}>
             <img src={item.image} alt={item.name} />
             <div><span>{item.location}</span><h3>{item.name}</h3><p>{item.specs}</p></div>
             <dl><div><dt>{t("yield")}</dt><dd>{item.yield}</dd></div><div><dt>{t("occupancy")}</dt><dd>{item.occupancy}</dd></div><div><dt>{t("privacy")}</dt><dd>{item.privacy}</dd></div></dl>
-            <button type="button" onClick={() => go(`/admin-unit/${item.slug}`)}><Icon name="edit" />{t("edit")}</button>
-            <button type="button" onClick={() => go(`/detail/${item.slug}`)}><Icon name="external" />{t("open")}</button>
+            <div className="admin-listing-actions">
+              <button type="button" onClick={() => go(`/detail/${item.slug}`)}><Icon name="external" />{t("open")}</button>
+              <button type="button" onClick={() => go(`/admin-unit/${item.slug}`)}><Icon name="edit" />{t("edit")}</button>
+              <button className="admin-listing-remove" type="button" disabled={deletingSlug === item.slug} onClick={() => removeUnit(item)}><Icon name="trash" />{t("removeUnit")}</button>
+            </div>
           </article>
         ))}
       </section>}
@@ -3356,13 +3389,6 @@ function UnitManagementPage({
     }
   }
 
-  async function removeUnit() {
-    if (!(await onConfirmRequest({ eyebrow: t("confirmAction"), title: `${t("removeUnit")}: ${property.name}`, description: t("deleteUnitConfirmation"), confirmLabel: t("confirmDelete"), tone: "danger", icon: "trash" }))) return;
-    const nextProperties = await deleteProperty(property.slug);
-    setProperties(nextProperties);
-    go("/admin");
-  }
-
   async function resetDefaults() {
     if (!(await onConfirmRequest({ eyebrow: t("confirmAction"), title: t("seedDefaults"), description: t("restoreDefaultsConfirmation"), confirmLabel: t("confirmUpdate"), icon: "refresh" }))) return;
     const nextProperties = await seedDefaults();
@@ -3418,7 +3444,6 @@ function UnitManagementPage({
           <label className="wide">{t("explanation")}<textarea name="explanation" defaultValue={property.explanation} /></label>
           <div className="admin-actions">
             <button type="submit"><Icon name="save" />{t("saveUnit")}</button>
-            <button type="button" onClick={removeUnit}><Icon name="trash" />{t("removeUnit")}</button>
             <button type="button" onClick={resetDefaults}><Icon name="refresh" />{t("seedDefaults")}</button>
           </div>
           <p className="auth-message">{message}</p>

@@ -3467,8 +3467,8 @@ progress {
   }
   .admin-listing img { width: 92px; height: 92px; border-radius: 16px; }
   .admin-listing dl,
-  .admin-listing > button { grid-column: 1 / -1; }
-  .admin-listing > button { width: 100%; }
+  .admin-listing-actions { grid-column: 1 / -1; }
+  .admin-listing-actions { width: 100%; }
   .admin-control-section { grid-template-columns: 1fr; }
 }
 
@@ -4007,7 +4007,7 @@ progress {
 
 .admin-listing {
   display: grid;
-  grid-template-columns: 180px 1fr auto auto auto;
+  grid-template-columns: 180px minmax(220px, 1fr) auto minmax(250px, auto);
   gap: 22px;
   align-items: center;
   padding: 18px;
@@ -4016,6 +4016,44 @@ progress {
   background: rgba(255, 255, 255, 0.08);
   box-shadow: 0 22px 70px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.1);
   backdrop-filter: var(--glass-blur);
+}
+
+.admin-listing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.admin-listing-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.admin-listing-actions .admin-listing-remove {
+  color: #ffd9d4;
+  border-color: rgba(226, 92, 78, 0.44);
+  background: rgba(112, 28, 22, 0.34);
+}
+
+.admin-listing-message {
+  margin: 0;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  padding: 12px 15px;
+  background: rgba(7, 7, 7, 0.3);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .admin-listing-actions .admin-listing-remove:hover {
+    color: #fff3f0 !important;
+    border-color: rgba(235, 110, 96, 0.7) !important;
+    background: rgba(132, 35, 27, 0.48) !important;
+    box-shadow: 0 14px 34px rgba(70, 12, 8, 0.22) !important;
+  }
 }
 
 .admin-units-first {
@@ -4985,6 +5023,15 @@ progress {
 
   .admin-listing dl {
     grid-template-columns: 1fr;
+  }
+
+  .admin-listing-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .admin-listing-actions button {
+    flex: 1 1 140px;
   }
 
   .admin-inbox,

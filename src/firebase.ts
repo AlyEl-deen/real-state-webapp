@@ -244,8 +244,18 @@ export async function uploadPropertyImage(file: File, propertySlug: string) {
 }
 
 export async function deleteProperty(slug: string) {
+  const user = auth.currentUser;
+  if (!user || !isAdmin(getLocalSession())) {
+    throw new Error("An authenticated isAdmin account is required to remove units.");
+  }
+  await user.getIdToken(true);
   const properties = (await getProperties()).filter((item) => item.slug !== slug);
-  await withFirestoreTimeout(deleteDoc(doc(db, "properties", slug)));
+  try {
+    await withFirestoreTimeout(deleteDoc(doc(db, "properties", slug)));
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "Firestore rejected the deletion.";
+    throw new Error(`The unit was not deleted from Firestore. ${detail}`);
+  }
   writeJson("auraProperties", properties);
   return properties;
 }
