@@ -23,6 +23,7 @@ import {
   submitRentalRequest,
   updateManagedRequestStatus,
   updateProfileData,
+  uploadProfileImage,
   uploadPropertyImage,
   waitForAuth,
 } from "./firebase";
@@ -36,10 +37,18 @@ type SelectOption = {
   value: string;
   label: string;
 };
-type ConfirmationRequest = {
-  label: string;
+type ConfirmationOptions = {
+  eyebrow: string;
+  title: string;
+  description: string;
+  confirmLabel: string;
+  tone?: "default" | "danger" | "save";
+  icon?: IconName;
+};
+type ConfirmationRequest = ConfirmationOptions & {
   resolve: (confirmed: boolean) => void;
 };
+type ConfirmAction = (options: ConfirmationOptions) => Promise<boolean>;
 type AccommodationType = "all" | "studio" | "monthly" | "compound" | "apartment";
 type DurationType = "any" | "nightly" | "weekly" | "monthly" | "seasonal";
 type MapRental = {
@@ -164,6 +173,20 @@ const translations = {
     admin: "Admin",
     privateAdvisor: "Private Advisor",
     privateGlobalResidences: "Private global residences",
+    footerSiteCopy: "Private residences, curated rentals, interactive geographic search, and discreet advisor access across the Red Sea.",
+    footerExplore: "Explore",
+    footerPlatform: "Platform",
+    systemActive: "System Active",
+    whyHurghada: "Why Hurghada?",
+    hurghadaHomeTitle: "Invest where the world comes to live.",
+    hurghadaHomeCopy: "Forty kilometers of Red Sea coastline, year-round tourism, international connectivity, and exceptional value make Hurghada more than a destination—it is a high-performance property market.",
+    yearRoundDemand: "Year-round demand",
+    yearRoundDemandCopy: "Twelve active tourism months support stronger occupancy and rental continuity.",
+    investorValue: "Investor advantage",
+    investorValueCopy: "Favorable currency dynamics and growing coastal communities create compelling entry value.",
+    coastalLifestyle: "Coastal lifestyle",
+    coastalLifestyleCopy: "365 days of sunshine, modern infrastructure, and an established international community.",
+    discoverHurghada: "Discover the Hurghada opportunity",
     exploreResidences: "Explore Residences",
     speakToAdvisor: "Speak to an Advisor",
     destination: "Destination",
@@ -234,6 +257,16 @@ const translations = {
       "You are about to send a private request. Your account details and brief will be stored securely for advisor follow-up.",
     cancel: "Cancel",
     sendRequest: "Send Request",
+    confirmAction: "Confirm Action",
+    saveSettingsConfirmation: "Save these site settings and publish them to the live experience?",
+    deleteRequestConfirmation: "Permanently delete this request from the admin inbox? This cannot be undone.",
+    statusConfirmation: "Apply this status change to the selected client request?",
+    saveUnitConfirmation: "Save and publish all changes made to this residence?",
+    deleteUnitConfirmation: "Permanently remove this residence from the catalogue? This cannot be undone.",
+    restoreDefaultsConfirmation: "Replace the current residence catalogue with the default units?",
+    confirmSave: "Yes, Save Changes",
+    confirmDelete: "Yes, Delete",
+    confirmUpdate: "Yes, Update",
     closeAdvisorForm: "Close advisor form",
     describeResidence: "Describe the residence you need.",
     advisorNote:
@@ -276,6 +309,10 @@ const translations = {
     signupHeadline: "Sign up and get your property.",
     usernameOrEmail: "Username or email",
     password: "Password",
+    confirmPassword: "Confirm password",
+    passwordsDoNotMatch: "Passwords do not match. Please enter the same password twice.",
+    showPassword: "Show password",
+    hidePassword: "Hide password",
     enterPrivatePortal: "Enter Private Portal",
     dontHaveAccount: "Don't have an account? Sign up",
     fullName: "Full name",
@@ -307,6 +344,11 @@ const translations = {
     verifiedAccount: "Verified private account",
     verificationPending: "Email verification pending",
     profileImageUrl: "Profile image URL",
+    profileImageUpload: "Upload profile image",
+    profileImageHelp: "JPG, PNG or WebP · maximum 5 MB",
+    uploadingProfileImage: "Uploading profile image...",
+    changeProfileImage: "Choose or change profile image",
+    profileImageSelected: "Ready to upload when you save your profile",
     saveProfile: "Save Profile",
     savingProfile: "Saving profile...",
     profileSaved: "Profile saved.",
@@ -436,6 +478,20 @@ const translations = {
     admin: "Admin",
     privateAdvisor: "Privater Berater",
     privateGlobalResidences: "Private globale Residenzen",
+    footerSiteCopy: "Private Residenzen, kuratierte Mietobjekte, interaktive Kartensuche und diskrete Beratung am Roten Meer.",
+    footerExplore: "Entdecken",
+    footerPlatform: "Plattform",
+    systemActive: "System aktiv",
+    whyHurghada: "Warum Hurghada?",
+    hurghadaHomeTitle: "Investieren Sie dort, wo die Welt leben möchte.",
+    hurghadaHomeCopy: "Vierzig Kilometer Küste, ganzjähriger Tourismus, internationale Anbindung und außergewöhnlicher Wert machen Hurghada zu einem leistungsstarken Immobilienmarkt.",
+    yearRoundDemand: "Ganzjährige Nachfrage",
+    yearRoundDemandCopy: "Zwölf aktive Tourismusmonate unterstützen hohe Auslastung und kontinuierliche Mieteinnahmen.",
+    investorValue: "Vorteil für Investoren",
+    investorValueCopy: "Attraktive Währungsdynamik und wachsende Küstengemeinden schaffen überzeugende Einstiegschancen.",
+    coastalLifestyle: "Leben an der Küste",
+    coastalLifestyleCopy: "365 Sonnentage, moderne Infrastruktur und eine etablierte internationale Gemeinschaft.",
+    discoverHurghada: "Die Chancen in Hurghada entdecken",
     exploreResidences: "Residenzen entdecken",
     speakToAdvisor: "Mit einem Berater sprechen",
     destination: "Destination",
@@ -506,6 +562,16 @@ const translations = {
       "Sie senden eine private Anfrage. Ihre Kontodaten und Ihr Briefing werden sicher für die Nachverfolgung durch den Berater gespeichert.",
     cancel: "Abbrechen",
     sendRequest: "Anfrage senden",
+    confirmAction: "Aktion bestätigen",
+    saveSettingsConfirmation: "Diese Website-Einstellungen speichern und live veröffentlichen?",
+    deleteRequestConfirmation: "Diese Anfrage dauerhaft aus dem Admin-Posteingang löschen? Dies kann nicht rückgängig gemacht werden.",
+    statusConfirmation: "Diese Statusänderung auf die ausgewählte Kundenanfrage anwenden?",
+    saveUnitConfirmation: "Alle Änderungen an dieser Residenz speichern und veröffentlichen?",
+    deleteUnitConfirmation: "Diese Residenz dauerhaft aus dem Katalog entfernen? Dies kann nicht rückgängig gemacht werden.",
+    restoreDefaultsConfirmation: "Den aktuellen Residenzkatalog durch die Standardeinheiten ersetzen?",
+    confirmSave: "Ja, Änderungen speichern",
+    confirmDelete: "Ja, löschen",
+    confirmUpdate: "Ja, aktualisieren",
     closeAdvisorForm: "Beraterformular schließen",
     describeResidence: "Beschreiben Sie die gewünschte Residenz.",
     advisorNote:
@@ -548,6 +614,10 @@ const translations = {
     signupHeadline: "Registrieren Sie sich und sichern Sie Ihre Immobilie.",
     usernameOrEmail: "Benutzername oder E-Mail",
     password: "Passwort",
+    confirmPassword: "Passwort bestätigen",
+    passwordsDoNotMatch: "Die Passwörter stimmen nicht überein. Bitte geben Sie dasselbe Passwort zweimal ein.",
+    showPassword: "Passwort anzeigen",
+    hidePassword: "Passwort ausblenden",
     enterPrivatePortal: "Privates Portal öffnen",
     dontHaveAccount: "Noch kein Konto? Registrieren",
     fullName: "Vollständiger Name",
@@ -579,6 +649,11 @@ const translations = {
     verifiedAccount: "Verifiziertes privates Konto",
     verificationPending: "E-Mail-Verifizierung ausstehend",
     profileImageUrl: "Profilbild-URL",
+    profileImageUpload: "Profilbild hochladen",
+    profileImageHelp: "JPG, PNG oder WebP · maximal 5 MB",
+    uploadingProfileImage: "Profilbild wird hochgeladen...",
+    changeProfileImage: "Profilbild auswählen oder ändern",
+    profileImageSelected: "Wird beim Speichern des Profils hochgeladen",
     saveProfile: "Profil speichern",
     savingProfile: "Profil wird gespeichert...",
     profileSaved: "Profil gespeichert.",
@@ -708,6 +783,20 @@ const translations = {
     admin: "Admin",
     privateAdvisor: "Consulente privato",
     privateGlobalResidences: "Residenze private globali",
+    footerSiteCopy: "Residenze private, affitti selezionati, ricerca geografica interattiva e consulenza riservata sul Mar Rosso.",
+    footerExplore: "Esplora",
+    footerPlatform: "Piattaforma",
+    systemActive: "Sistema attivo",
+    whyHurghada: "Perché Hurghada?",
+    hurghadaHomeTitle: "Investi dove il mondo sceglie di vivere.",
+    hurghadaHomeCopy: "Quaranta chilometri di costa, turismo tutto l'anno, collegamenti internazionali e valore eccezionale rendono Hurghada un mercato immobiliare ad alte prestazioni.",
+    yearRoundDemand: "Domanda tutto l'anno",
+    yearRoundDemandCopy: "Dodici mesi di turismo attivo sostengono occupazione e continuità dei ricavi locativi.",
+    investorValue: "Vantaggio per l'investitore",
+    investorValueCopy: "Dinamiche valutarie favorevoli e comunità costiere in crescita creano opportunità interessanti.",
+    coastalLifestyle: "Lifestyle costiero",
+    coastalLifestyleCopy: "365 giorni di sole, infrastrutture moderne e una comunità internazionale consolidata.",
+    discoverHurghada: "Scopri l'opportunità Hurghada",
     exploreResidences: "Esplora le residenze",
     speakToAdvisor: "Parla con un consulente",
     destination: "Destinazione",
@@ -778,6 +867,16 @@ const translations = {
       "Stai per inviare una richiesta privata. I dettagli del tuo account e il brief saranno salvati in modo sicuro per il follow-up del consulente.",
     cancel: "Annulla",
     sendRequest: "Invia richiesta",
+    confirmAction: "Conferma azione",
+    saveSettingsConfirmation: "Salvare queste impostazioni e pubblicarle nell'esperienza live?",
+    deleteRequestConfirmation: "Eliminare definitivamente questa richiesta dalla inbox admin? L'azione non può essere annullata.",
+    statusConfirmation: "Applicare questo cambio di stato alla richiesta cliente selezionata?",
+    saveUnitConfirmation: "Salvare e pubblicare tutte le modifiche apportate a questa residenza?",
+    deleteUnitConfirmation: "Rimuovere definitivamente questa residenza dal catalogo? L'azione non può essere annullata.",
+    restoreDefaultsConfirmation: "Sostituire il catalogo attuale con le unità predefinite?",
+    confirmSave: "Sì, salva modifiche",
+    confirmDelete: "Sì, elimina",
+    confirmUpdate: "Sì, aggiorna",
     closeAdvisorForm: "Chiudi modulo consulente",
     describeResidence: "Descrivi la residenza di cui hai bisogno.",
     advisorNote:
@@ -820,6 +919,10 @@ const translations = {
     signupHeadline: "Registrati e ottieni la tua proprieta.",
     usernameOrEmail: "Nome utente o email",
     password: "Password",
+    confirmPassword: "Conferma password",
+    passwordsDoNotMatch: "Le password non corrispondono. Inserisci la stessa password due volte.",
+    showPassword: "Mostra password",
+    hidePassword: "Nascondi password",
     enterPrivatePortal: "Entra nel portale privato",
     dontHaveAccount: "Non hai un account? Registrati",
     fullName: "Nome completo",
@@ -851,6 +954,11 @@ const translations = {
     verifiedAccount: "Account privato verificato",
     verificationPending: "Verifica email in sospeso",
     profileImageUrl: "URL immagine profilo",
+    profileImageUpload: "Carica immagine profilo",
+    profileImageHelp: "JPG, PNG o WebP · massimo 5 MB",
+    uploadingProfileImage: "Caricamento immagine profilo...",
+    changeProfileImage: "Scegli o cambia immagine profilo",
+    profileImageSelected: "Verrà caricata quando salvi il profilo",
     saveProfile: "Salva profilo",
     savingProfile: "Salvataggio profilo...",
     profileSaved: "Profilo salvato.",
@@ -1335,14 +1443,14 @@ function ConfirmationModal({
   return (
     <aside className="request-confirmation open">
       <button className="confirmation-scrim" type="button" aria-label={t("cancel")} onClick={() => onDecision(false)} />
-      <section className="confirmation-panel" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
-        <span className="confirmation-mark" aria-hidden="true"><Icon name="shield" /></span>
-        <p className="eyebrow">{t("confirmRequest")}</p>
-        <h2 id="confirm-title">{t("sendPrivateRequest")}</h2>
-        <p>{t("confirmationCopy")}</p>
+      <section className={`confirmation-panel ${request.tone || "default"}`} role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+        <span className="confirmation-mark" aria-hidden="true"><Icon name={request.icon || "shield"} /></span>
+        <p className="eyebrow">{request.eyebrow}</p>
+        <h2 id="confirm-title">{request.title}</h2>
+        <p>{request.description}</p>
         <div className="confirmation-actions">
           <button type="button" onClick={() => onDecision(false)}><Icon name="x" />{t("cancel")}</button>
-          <button type="button" onClick={() => onDecision(true)}><Icon name="check" />{t("sendRequest")}</button>
+          <button className="confirmation-accept" type="button" onClick={() => onDecision(true)}><Icon name={request.icon || "check"} />{request.confirmLabel}</button>
         </div>
       </section>
     </aside>
@@ -1352,17 +1460,27 @@ function ConfirmationModal({
 function Header({
   user,
   settings,
+  activePage,
   onNavigate,
   onContact,
 }: {
   user: Profile | null;
   settings: SiteSettings;
+  activePage: Page;
   onNavigate: (section: string) => void;
   onContact: () => void;
 }) {
   const { t } = useLanguage();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const headerRef = useDismissOnOutside<HTMLElement>(mobileMenuOpen, () => setMobileMenuOpen(false));
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [mobileMenuOpen]);
   const navigateMobile = (section: string) => {
     setMobileMenuOpen(false);
     onNavigate(section);
@@ -1377,11 +1495,11 @@ function Header({
       <nav className="desktop-nav" aria-label={t("primaryNavigation")}>
         <button type="button" onClick={() => onNavigate("residences")}><Icon name="building" />{t("residences")}</button>
         <button type="button" onClick={() => onNavigate("collections")}><Icon name="layers" />{t("collections")}</button>
-        <a href="#/explore-map"><Icon name="map" />{t("exploreMap")}</a>
-        <a href="#/about"><Icon name="globe" />{t("about")}</a>
+        <a href="#/explore-map" aria-current={activePage === "explore-map" ? "page" : undefined}><Icon name="map" />{t("exploreMap")}</a>
+        <a href="#/about" aria-current={activePage === "about" ? "page" : undefined}><Icon name="globe" />{t("about")}</a>
         <button type="button" onClick={() => onNavigate("concierge")}><Icon name="message" />{t("concierge")}</button>
-        {!user && <a href="#/auth"><Icon name="lock" />{t("signIn")}</a>}
-        {isAdmin() && <a href="#/admin"><Icon name="settings" />{t("admin")}</a>}
+        {!user && <a href="#/auth" aria-current={activePage === "auth" ? "page" : undefined}><Icon name="lock" />{t("signIn")}</a>}
+        {isAdmin(user) && <a className="admin-nav-link" href="#/admin" aria-current={activePage === "admin" || activePage === "admin-unit" ? "page" : undefined}><Icon name="settings" />{t("admin")}</a>}
       </nav>
       <div className="header-actions">
         <LanguageSwitcher />
@@ -1389,7 +1507,7 @@ function Header({
           <Icon name="message" />{t("contact")}
         </button>
         {user && (
-          <a className="profile-chip" href="#/profile">
+          <a className="profile-chip" href="#/profile" aria-current={activePage === "profile" ? "page" : undefined}>
             <span
               className="profile-avatar"
               style={user.photoURL ? { backgroundImage: `url("${user.photoURL}")` } : undefined}
@@ -1415,45 +1533,35 @@ function Header({
         <LanguageSwitcher compact />
         <button type="button" onClick={() => navigateMobile("residences")}><Icon name="building" />{t("residences")}</button>
         <button type="button" onClick={() => navigateMobile("collections")}><Icon name="layers" />{t("collections")}</button>
-        <a href="#/explore-map" onClick={() => setMobileMenuOpen(false)}><Icon name="map" />{t("exploreMap")}</a>
-        <a href="#/about" onClick={() => setMobileMenuOpen(false)}><Icon name="globe" />{t("about")}</a>
+        <a href="#/explore-map" aria-current={activePage === "explore-map" ? "page" : undefined} onClick={() => setMobileMenuOpen(false)}><Icon name="map" />{t("exploreMap")}</a>
+        <a href="#/about" aria-current={activePage === "about" ? "page" : undefined} onClick={() => setMobileMenuOpen(false)}><Icon name="globe" />{t("about")}</a>
         <button type="button" onClick={() => navigateMobile("concierge")}><Icon name="message" />{t("concierge")}</button>
-        {!user && <a href="#/auth" onClick={() => setMobileMenuOpen(false)}><Icon name="lock" />{t("signIn")}</a>}
-        {isAdmin() && <a href="#/admin" onClick={() => setMobileMenuOpen(false)}><Icon name="settings" />{t("admin")}</a>}
+        {!user && <a href="#/auth" aria-current={activePage === "auth" ? "page" : undefined} onClick={() => setMobileMenuOpen(false)}><Icon name="lock" />{t("signIn")}</a>}
+        {isAdmin(user) && <a className="admin-nav-link" href="#/admin" aria-current={activePage === "admin" || activePage === "admin-unit" ? "page" : undefined} onClick={() => setMobileMenuOpen(false)}><Icon name="settings" />{t("admin")}</a>}
         <button type="button" onClick={() => { setMobileMenuOpen(false); onContact(); }}><Icon name="message" />{t("contact")}</button>
       </nav>
     </header>
   );
 }
 
-function GlobalFooter({
-  settings,
-  onNavigate,
-  onAdvisor,
-}: {
-  settings: SiteSettings;
-  onNavigate: (section: string) => void;
-  onAdvisor: (context?: AdvisorContext) => void;
-}) {
+function GlobalFooter({ settings, onNavigate }: { settings: SiteSettings; onNavigate: (section: string) => void }) {
   const { t } = useLanguage();
   return (
-    <footer className="site-footer">
-      <div className="footer-brand">
-        <button className="brand brand-button" type="button" onClick={() => onNavigate("home")}>
-          <span className="brand-mark">A</span>
-          <span>{settings.brandName}</span>
-        </button>
-        <p>{settings.cryptoPayments}</p>
+    <footer id="contact" className="site-footer wmd-footer">
+      <div className="wmd-footer-main">
+        <div className="wmd-footer-intro">
+          <h3>{settings.brandName}</h3>
+          <p>{t("footerSiteCopy")}</p>
+        </div>
+        <div className="wmd-footer-links">
+          <div><p>{t("footerExplore")}</p><ul><li><a href="#/home" onClick={(event) => { event.preventDefault(); onNavigate("residences"); }}>{t("residences")}</a></li><li><a href="#/home" onClick={(event) => { event.preventDefault(); onNavigate("collections"); }}>{t("collections")}</a></li><li><a href="#/explore-map">{t("exploreMap")}</a></li></ul></div>
+          <div><p>{t("footerPlatform")}</p><ul><li><a href="#/about">{t("about")}</a></li><li><a href="#/about/contact">{t("contact")}</a></li><li><a href="#/profile">{t("profile")}</a></li></ul></div>
+        </div>
       </div>
-      <nav className="footer-nav" aria-label={t("primaryNavigation")}>
-        <button type="button" onClick={() => onNavigate("residences")}><Icon name="building" />{t("residences")}</button>
-        <button type="button" onClick={() => onNavigate("collections")}><Icon name="layers" />{t("collections")}</button>
-        <button type="button" onClick={() => onNavigate("concierge")}><Icon name="message" />{t("concierge")}</button>
-        <a href="#/profile"><Icon name="user" />{t("profile")}</a>
-      </nav>
-      <div className="footer-actions">
-        <button type="button" onClick={() => onAdvisor({ source: "footer" })}><Icon name="message" />{t("privateAdvisor")}</button>
-        <span>{t("privateGlobalResidences")}</span>
+      <div className="wmd-footer-signature">
+        <img src="assets/wmd-office-logo.png" alt="W.M.D. office logo" />
+        <div><p>© 2026 <strong>Future Coders</strong></p><span>Powered by W.M.D. office</span></div>
+        <small><i aria-hidden="true" />{t("systemActive")}</small>
       </div>
     </footer>
   );
@@ -1474,7 +1582,7 @@ function HomePage({
   setProperties: (properties: Property[]) => void;
   onNavigate: (section: string) => void;
   onAdvisor: (context?: AdvisorContext) => void;
-  onConfirmRequest: (label: string) => Promise<boolean>;
+  onConfirmRequest: ConfirmAction;
 }) {
   const { t } = useLanguage();
   const [destination, setDestination] = useState("all");
@@ -1657,6 +1765,24 @@ function HomePage({
         </div>
       </section>
 
+      <section className="section home-hurghada-preview" aria-labelledby="home-hurghada-title">
+        <div className="home-hurghada-lead">
+          <p className="eyebrow">{t("whyHurghada")}</p>
+          <h2 id="home-hurghada-title">{t("hurghadaHomeTitle")}</h2>
+          <p>{t("hurghadaHomeCopy")}</p>
+          <a href="#/about"><Icon name="compass" />{t("discoverHurghada")}</a>
+        </div>
+        <div className="home-hurghada-signals">
+          {[
+            ["12", t("yearRoundDemand"), t("yearRoundDemandCopy"), "calendar" as IconName],
+            ["ROI", t("investorValue"), t("investorValueCopy"), "wallet" as IconName],
+            ["365", t("coastalLifestyle"), t("coastalLifestyleCopy"), "spark" as IconName],
+          ].map(([value, title, copy, icon]) => (
+            <article key={String(title)}><span>{value}</span><Icon name={icon as IconName} /><h3>{title}</h3><p>{copy}</p></article>
+          ))}
+        </div>
+      </section>
+
       <section className="catalog section" id="residences">
         {curated && (
           <div className="curation-status active">
@@ -1795,7 +1921,7 @@ function HomePage({
           onSubmit={async (event) => {
             event.preventDefault();
             if (!requireAccess()) return;
-            if (!(await onConfirmRequest("concierge booking"))) return;
+            if (!(await onConfirmRequest({ eyebrow: t("confirmRequest"), title: t("sendPrivateRequest"), description: t("confirmationCopy"), confirmLabel: t("sendRequest"), icon: "message" }))) return;
             const data = new FormData(event.currentTarget);
             try {
               await submitRentalRequest({
@@ -1861,7 +1987,7 @@ function AdvisorDrawer({
   user: Profile | null;
   properties: Property[];
   onClose: () => void;
-  onConfirmRequest: (label: string) => Promise<boolean>;
+  onConfirmRequest: ConfirmAction;
 }) {
   const { t } = useLanguage();
   const [message, setMessage] = useState("");
@@ -1898,7 +2024,7 @@ function AdvisorDrawer({
       request: String(data.get("request")),
     };
 
-    if (!(await onConfirmRequest("private advisor brief"))) return;
+    if (!(await onConfirmRequest({ eyebrow: t("confirmRequest"), title: t("sendPrivateRequest"), description: t("confirmationCopy"), confirmLabel: t("sendRequest"), icon: "message" }))) return;
 
     try {
       setSubmitting(true);
@@ -2245,7 +2371,7 @@ function ExploreMapPanel({
   );
 }
 
-function ExploreMapPage({ user, routeQuery, onConfirmRequest }: { user: Profile | null; routeQuery: string; onConfirmRequest: (label: string) => Promise<boolean> }) {
+function ExploreMapPage({ user, routeQuery, onConfirmRequest }: { user: Profile | null; routeQuery: string; onConfirmRequest: ConfirmAction }) {
   const { t } = useLanguage();
   const initialParams = useMemo(() => new URLSearchParams(routeQuery), [routeQuery]);
   const initialCountry = initialParams.get("country") || "Egypt";
@@ -2326,7 +2452,7 @@ function ExploreMapPage({ user, routeQuery, onConfirmRequest }: { user: Profile 
   }
 
   async function requestDeal(rental: MapRental) {
-    if (!(await onConfirmRequest(`deal request for ${rental.title}`))) return;
+    if (!(await onConfirmRequest({ eyebrow: t("confirmRequest"), title: rental.title, description: t("confirmationCopy"), confirmLabel: t("sendRequest"), icon: "message" }))) return;
     try {
       await submitRentalRequest({
         source: "explore-map-deal",
@@ -2346,7 +2472,7 @@ function ExploreMapPage({ user, routeQuery, onConfirmRequest }: { user: Profile 
   }
 
   async function sendSearchRequest() {
-    if (!(await onConfirmRequest(`map search request for ${country} ${city}`))) return;
+    if (!(await onConfirmRequest({ eyebrow: t("confirmRequest"), title: `${country} · ${city}`, description: t("confirmationCopy"), confirmLabel: t("sendRequest"), icon: "map" }))) return;
     try {
       await submitRentalRequest({
         source: "explore-map-filter-search",
@@ -2473,6 +2599,8 @@ function AuthPage({ onUser }: { onUser: (user: Profile | null) => void }) {
   const [messageTone, setMessageTone] = useState<"info" | "success" | "error">("info");
   const [verificationEmail, setVerificationEmail] = useState("");
   const [authSubmitting, setAuthSubmitting] = useState(false);
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const [confirmPasswordVisible, setConfirmPasswordVisible] = useState(false);
   const [resendState, setResendState] = useState<"idle" | "sending" | "sent">("idle");
   const settleConfirmation = () => new Promise((resolve) => window.setTimeout(resolve, 450));
 
@@ -2507,6 +2635,13 @@ function AuthPage({ onUser }: { onUser: (user: Profile | null) => void }) {
   async function handleSignUp(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
+    const password = String(data.get("password"));
+    const confirmPassword = String(data.get("confirmPassword"));
+    if (password !== confirmPassword) {
+      setMessageTone("error");
+      setMessage(t("passwordsDoNotMatch"));
+      return;
+    }
     setAuthSubmitting(true);
     setMessageTone("info");
     setMessage(t("creatingAccount"));
@@ -2514,7 +2649,7 @@ function AuthPage({ onUser }: { onUser: (user: Profile | null) => void }) {
       const result = await signUp({
         name: String(data.get("name")),
         email: String(data.get("email")),
-        password: String(data.get("password")),
+        password,
         intent: String(data.get("intent")),
       });
       setVerificationEmail(result.email);
@@ -2561,7 +2696,7 @@ function AuthPage({ onUser }: { onUser: (user: Profile | null) => void }) {
         {mode === "signin" && (
           <form className="auth-form active" onSubmit={handleSignIn}>
             <label>{t("usernameOrEmail")}<input name="login" autoComplete="username" /></label>
-            <label>{t("password")}<input name="password" type="password" autoComplete="current-password" /></label>
+            <label>{t("password")}<span className="password-field"><input name="password" type={passwordVisible ? "text" : "password"} autoComplete="current-password" /><button type="button" aria-label={passwordVisible ? t("hidePassword") : t("showPassword")} title={passwordVisible ? t("hidePassword") : t("showPassword")} onClick={() => setPasswordVisible((visible) => !visible)}><Icon name={passwordVisible ? "x" : "eye"} /></button></span></label>
             <button className="auth-primary-button" type="submit" disabled={authSubmitting}><Icon name="lock" />{authSubmitting ? t("signingIn") : t("enterPrivatePortal")}</button>
             <button className="auth-switch-link" type="button" onClick={() => setMode("signup")}><Icon name="user" />{t("dontHaveAccount")}</button>
           </form>
@@ -2570,7 +2705,8 @@ function AuthPage({ onUser }: { onUser: (user: Profile | null) => void }) {
           <form className="auth-form active" onSubmit={handleSignUp}>
             <label>{t("fullName")}<input name="name" /></label>
             <label>{t("email")}<input name="email" type="email" /></label>
-            <label>{t("password")}<input name="password" type="password" /></label>
+            <label>{t("password")}<span className="password-field"><input name="password" type={passwordVisible ? "text" : "password"} autoComplete="new-password" minLength={6} required /><button type="button" aria-label={passwordVisible ? t("hidePassword") : t("showPassword")} title={passwordVisible ? t("hidePassword") : t("showPassword")} onClick={() => setPasswordVisible((visible) => !visible)}><Icon name={passwordVisible ? "x" : "eye"} /></button></span></label>
+            <label>{t("confirmPassword")}<span className="password-field"><input name="confirmPassword" type={confirmPasswordVisible ? "text" : "password"} autoComplete="new-password" minLength={6} required /><button type="button" aria-label={confirmPasswordVisible ? t("hidePassword") : t("showPassword")} title={confirmPasswordVisible ? t("hidePassword") : t("showPassword")} onClick={() => setConfirmPasswordVisible((visible) => !visible)}><Icon name={confirmPasswordVisible ? "x" : "eye"} /></button></span></label>
             <label>{t("intent")}<select name="intent"><option value="Buy">{t("buy")}</option><option value="Rent">{t("rent")}</option><option value="Invest">{t("invest")}</option><option value="List a property">{t("listAProperty")}</option></select></label>
             <button className="auth-primary-button" type="submit" disabled={authSubmitting}><Icon name="user" />{authSubmitting ? t("creatingAccount") : t("createPrivateAccount")}</button>
             <button className="auth-switch-link" type="button" onClick={() => setMode("signin")}><Icon name="lock" />{t("alreadyHaveAccount")}</button>
@@ -2597,16 +2733,29 @@ function ProfilePage({ user, onUser }: { user: Profile | null; onUser: (user: Pr
   const { t } = useLanguage();
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [selectedImageName, setSelectedImageName] = useState("");
+  const [selectedProfileImage, setSelectedProfileImage] = useState<File | null>(null);
+  const [profileImagePreview, setProfileImagePreview] = useState(user?.photoURL || "");
+  const profileImageInputRef = useRef<HTMLInputElement>(null);
   const [messageTone, setMessageTone] = useState<"info" | "success" | "error">("info");
   useEffect(() => {
     if (!user) go("/auth");
   }, [user]);
+  useEffect(() => {
+    if (!selectedProfileImage) {
+      setProfileImagePreview(user?.photoURL || "");
+      return;
+    }
+    const previewUrl = URL.createObjectURL(selectedProfileImage);
+    setProfileImagePreview(previewUrl);
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [selectedProfileImage, user?.photoURL]);
   if (!user) return null;
   return (
     <main className="profile-shell">
       <section className="profile-card">
         <div className="profile-hero-row">
-          <div className="profile-avatar large" style={user.photoURL ? { backgroundImage: `url("${user.photoURL}")` } : undefined}>{user.photoURL ? "" : initials(user.name || user.email)}</div>
+          <div className="profile-avatar large" style={profileImagePreview ? { backgroundImage: `url("${profileImagePreview}")` } : undefined}>{profileImagePreview ? "" : initials(user.name || user.email)}</div>
           <div className="profile-heading">
             <p className="eyebrow">{t("privateProfile")}</p>
             <h1>{user.name || user.email}</h1>
@@ -2624,7 +2773,17 @@ function ProfilePage({ user, onUser }: { user: Profile | null; onUser: (user: Pr
           setMessageTone("info");
           setMessage(t("savingProfile"));
           try {
-            onUser(await updateProfileData({ name: String(data.get("name")), intent: String(data.get("intent")), photoURL: String(data.get("photoURL")) }));
+            let photoURL = user.photoURL || "";
+            if (selectedProfileImage) {
+              setMessage(t("uploadingProfileImage"));
+              photoURL = await uploadProfileImage(selectedProfileImage);
+            }
+            const updatedProfile = await updateProfileData({ name: String(data.get("name")), intent: String(data.get("intent")), photoURL });
+            onUser(updatedProfile);
+            setSelectedProfileImage(null);
+            setSelectedImageName("");
+            setProfileImagePreview(photoURL);
+            if (profileImageInputRef.current) profileImageInputRef.current.value = "";
             setMessageTone("success");
             setMessage(t("profileSaved"));
           } catch (error) {
@@ -2636,7 +2795,18 @@ function ProfilePage({ user, onUser }: { user: Profile | null; onUser: (user: Pr
         }}>
           <label>{t("name")}<input name="name" defaultValue={user.name} /></label>
           <label>{t("email")}<input disabled defaultValue={user.email} /></label>
-          <label>{t("profileImageUrl")}<input name="photoURL" defaultValue={user.photoURL || ""} /></label>
+          <label className="profile-upload-field">{t("profileImageUpload")}<span className={`profile-file-control ${selectedProfileImage ? "has-selection" : ""}`}><Icon name={selectedProfileImage ? "check" : "upload"} /><strong>{selectedImageName || t("changeProfileImage")}</strong><small>{selectedProfileImage ? t("profileImageSelected") : t("profileImageHelp")}</small><input ref={profileImageInputRef} name="profileImage" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => {
+            const file = event.currentTarget.files?.[0] || null;
+            if (file && (!file.type.startsWith("image/") || file.size > 5 * 1024 * 1024)) {
+              setMessageTone("error");
+              setMessage(file.size > 5 * 1024 * 1024 ? "Profile images must be smaller than 5 MB." : "Choose a valid image file.");
+              event.currentTarget.value = "";
+              return;
+            }
+            setSelectedProfileImage(file);
+            setSelectedImageName(file?.name || "");
+            setMessage("");
+          }} /></span></label>
           <label>{t("intent")}<select name="intent" defaultValue={user.intent || "Rent"}><option value="Buy">{t("buy")}</option><option value="Rent">{t("rent")}</option><option value="Invest">{t("invest")}</option><option value="List a property">{t("listAProperty")}</option></select></label>
           <div className="profile-actions">
             <button className="profile-save-button" type="submit" disabled={saving}><Icon name="save" />{saving ? t("savingProfile") : t("saveProfile")}</button>
@@ -2649,7 +2819,7 @@ function ProfilePage({ user, onUser }: { user: Profile | null; onUser: (user: Pr
   );
 }
 
-function AboutPage({ id }: { id: string }) {
+function AboutPage({ id, onNavigate, onAdvisor }: { id: string; onNavigate: (section: string) => void; onAdvisor: (context?: AdvisorContext) => void }) {
   const { language } = useLanguage();
   useEffect(() => {
     if (id !== "contact") return;
@@ -2660,138 +2830,122 @@ function AboutPage({ id }: { id: string }) {
 
   const content = {
     en: {
-      companyDescription: "Company Description", companyName: "Company Name", servicesTitle: "Services We Offer",
-      servicesHeadline: "Luxury, tourism, project, and development representation.", agencyTitle: "Luxury and Tourist Property Agency",
-      agencyIntro: "We represent luxury and tourist properties for sale, rent, and investment, including:",
-      agencyOutro: "We assist clients with property discovery, private viewings, rental reservations, purchase inquiries, and tailored investment recommendations.",
-      projectTitle: "Major Project Representation",
-      projectText1: "We act as agents and marketing partners for major real estate projects, including residential compounds, resort developments, branded residences, and high-end mixed-use projects.",
-      projectText2: "Our role includes presenting the project to qualified clients, explaining unit types and investment value, supporting inquiries, and helping developers reach buyers, investors, and rental operators.",
-      marketingTitle: "Real Estate Development Marketing", marketingIntro: "We provide marketing support for real estate development services, including:",
-      platformTitle: "Rental Management and Sale Listing Platform",
-      platformText1: "We provide a reliable platform for owners who want to list their units with us for rental management or sale.",
-      platformText2: "Owners can submit their unit details, images, location, price, rental or sale objective, and preferred management arrangement. Our team reviews each listing, prepares it for presentation, and connects it with suitable renters, buyers, or investors.",
-      platformIntro: "Our platform supports:", websiteTitle: "Website Services", websiteHeadline: "The website offers:",
-      contactTitle: "Contact Information", contactHeadline: "Contact details will be completed later.", phone: "Phone / WhatsApp", office: "Office Address", social: "Social Media",
-      copy: [
-        "_______________________________ is a specialized real estate agency and marketing platform focused on luxury, tourist, and investment properties. We represent owners, developers, investors, and clients seeking premium real estate opportunities in high-value destinations.",
-        "Our work combines private property advisory, luxury rental management, real estate sales, major project representation, and development marketing. We provide a trusted platform where exclusive units can be presented professionally, matched with qualified buyers or tenants, and managed through a discreet advisory process.",
-        "We operate as agents for luxury villas, penthouses, tourist residences, private estates, branded developments, and major real estate projects. Our goal is to connect premium properties with the right audience through refined presentation, accurate listing management, private client communication, and strategic marketing.",
+      eyebrow: "Why Hurghada?", title: "The Ultimate Destination for Real Estate Investment & Coastal Living",
+      introLabel: "The Red Sea's Premier Property Hotspot", introTitle: "A global sanctuary, built around the sea.",
+      intro: ["Stretching across 40 kilometers of pristine coastline, Hurghada has evolved from a serene resort town into a booming cosmopolitan city and a powerhouse for property investment.", "Offering 365 days of sunshine, crystal-clear waters, and world-class infrastructure, Hurghada is no longer just a holiday destination—it is a global sanctuary for expats, retirees, digital nomads, and high-yield real estate investors."],
+      bridge: "Whether you are seeking a sun-drenched second home, a permanent relocation asset, or a high-performance rental property, here is why buying in Hurghada is the smartest move you can make today.",
+      stats: [["40 KM", "Pristine coastline"], ["365", "Days of sunshine"], ["12 MONTHS", "Active rental demand"], ["GLOBAL", "Airport connectivity"]],
+      sections: [
+        { number: "01", label: "High-Yield Investment", title: "Exceptional ROI & Rental Demand", intro: "Backed by year-round tourism and a growing international expat community, Hurghada offers financial dynamics that outperform traditional Mediterranean markets.", points: [["Continuous Rental Revenue", "Unlike seasonal European resorts, Hurghada welcomes active tourism all year—supporting high occupancy and premium returns for short-term and monthly rentals."], ["Rapid Capital Appreciation", "Property values in master-planned beachfront communities and gated compounds continue to grow, building meaningful equity for early buyers."], ["Massive Currency Advantage", "Buying in USD, EUR, or GBP against local development costs gives international investors exceptional purchasing power and attractive price-per-square-meter value."]] },
+        { number: "02", label: "Tax & Legal Advantages", title: "A Secure Buyer's Market", intro: "Egypt's modern investment framework supports foreign ownership with a transaction path designed to be clear, secure, and financially advantageous.", points: [["Zero Capital Gains Tax", "When you resell your property, foreign buyers can retain the full upside of their investment without a capital gains tax on the resale profit."], ["Minimal Holding Costs", "Annual property taxes remain exceptionally low compared with Europe and the Gulf, helping maximize net passive income."], ["Straightforward Foreign Ownership", "Foreign nationals can register qualifying properties in their own names with clear, legally binding title documentation that protects the asset."]] },
+        { number: "03", label: "Premium Lifestyle & Low Cost of Living", title: "The Expat Haven", intro: "Hurghada blends the ease of a coastal riviera with the affordability and practicality required for permanent living and long-term relocation.", points: [["Unbeatable Cost of Living", "Fine dining, private beach clubs, and premium services remain accessible at a fraction of comparable European or Mediterranean costs."], ["Advanced Infrastructure & Healthcare", "International schools, European-standard private hospitals, shopping hubs, and secure gated communities support daily life."], ["Global Connectivity", "Hurghada International Airport provides direct, year-round access to major European and Middle Eastern capitals."], ["Perfect Microclimate", "Warm winters and low-humidity summers encourage a healthy outdoor lifestyle centered around the Red Sea."]] },
       ],
-      agency: ["Private villas", "Beachfront residences", "Penthouses", "Tourist rental units", "Resort properties", "Private island and destination properties", "Investment residences"],
-      marketing: ["Project presentation", "Unit listing and positioning", "Buyer and investor lead generation", "Luxury property content and visual presentation", "Development campaign support", "Private advisor inquiry handling", "International client communication"],
-      platform: ["Unit listing for rental management", "Unit listing for sale", "Private advisor requests", "Concierge and rental inquiries", "Owner and client communication", "Property status tracking", "Yield and occupancy indicators", "Premium image galleries", "Currency and payment preference display", "Admin-managed listing updates"],
-      website: ["Curated luxury residence listings", "Advanced property search by destination, lifestyle, and privacy level", "Featured collections such as waterfront villas, penthouses, and investment residences", "Private advisor request forms", "Concierge request forms for viewings, rental reservations, and unit explanations", "Property comparison tools", "Currency display options", "Owner listing and unit management features", "Admin review of advisor and rental requests", "Property image gallery and detailed unit pages", "WhatsApp Business, private email, and premium call contact options"],
+      closingLabel: "Find Your Perfect Hurghada Property", closingTitle: "Your Red Sea address starts here.", closing: "From high-end studios for digital nomads to grand beachfront villas in exclusive gated compounds, our local expertise and international standards help you secure the exact asset for your goals.", explore: "Explore Hurghada Properties", advisor: "Speak to a Local Advisor",
     },
     de: {
-      companyDescription: "Unternehmensbeschreibung", companyName: "Firmenname", servicesTitle: "Unsere Leistungen",
-      servicesHeadline: "Vertretung fuer Luxusimmobilien, Tourismusprojekte und Entwicklungen.", agencyTitle: "Agentur fuer Luxus- und Ferienimmobilien",
-      agencyIntro: "Wir vertreten Luxus- und Ferienimmobilien zum Verkauf, zur Vermietung und als Kapitalanlage, darunter:",
-      agencyOutro: "Wir unterstuetzen Kunden bei der Immobiliensuche, privaten Besichtigungen, Mietreservierungen, Kaufanfragen und individuellen Anlageempfehlungen.",
-      projectTitle: "Vertretung grosser Projekte", projectText1: "Wir agieren als Vertreter und Marketingpartner fuer grosse Immobilienprojekte, darunter Wohnanlagen, Resortentwicklungen, Markenresidenzen und hochwertige Mischnutzungsprojekte.",
-      projectText2: "Wir praesentieren Projekte qualifizierten Kunden, erklaeren Einheitentypen und Investitionswert, begleiten Anfragen und helfen Entwicklern, Kaeufer, Investoren und Vermietungsbetreiber zu erreichen.",
-      marketingTitle: "Marketing fuer Immobilienentwicklungen", marketingIntro: "Wir bieten Marketingunterstuetzung fuer Immobilienentwicklungen, darunter:",
-      platformTitle: "Plattform fuer Vermietungsmanagement und Verkauf", platformText1: "Wir bieten Eigentuemerinnen und Eigentuemer eine verlaessliche Plattform, um Einheiten zur Vermietungsverwaltung oder zum Verkauf anzubieten.",
-      platformText2: "Eigentuemer koennen Einheitendaten, Bilder, Lage, Preis, Miet- oder Verkaufsziel und die gewuenschte Verwaltung einreichen. Unser Team prueft jedes Angebot, bereitet es professionell auf und verbindet es mit passenden Mietern, Kaeufern oder Investoren.",
-      platformIntro: "Unsere Plattform unterstuetzt:", websiteTitle: "Website-Leistungen", websiteHeadline: "Die Website bietet:",
-      contactTitle: "Kontaktinformationen", contactHeadline: "Die Kontaktdaten werden spaeter ergaenzt.", phone: "Telefon / WhatsApp", office: "Bueroadresse", social: "Soziale Medien",
-      copy: ["_______________________________ ist eine spezialisierte Immobilienagentur und Marketingplattform fuer Luxus-, Ferien- und Anlageimmobilien. Wir vertreten Eigentuemer, Entwickler, Investoren und Kunden, die hochwertige Chancen an erstklassigen Standorten suchen.", "Unsere Arbeit verbindet private Immobilienberatung, Luxusvermietung, Verkauf, Projektvertretung und Entwicklungsmarketing. Exklusive Einheiten werden professionell praesentiert, mit qualifizierten Kaeufern oder Mietern zusammengebracht und diskret betreut.", "Wir vertreten Luxusvillen, Penthouses, Ferienresidenzen, private Anwesen, Markenentwicklungen und grosse Immobilienprojekte. Unser Ziel ist es, Premiumimmobilien durch praezise Praesentation, korrekte Angebotsverwaltung, private Kommunikation und strategisches Marketing mit der richtigen Zielgruppe zu verbinden."],
-      agency: ["Private Villen", "Residenzen am Strand", "Penthouses", "Ferienmieteinheiten", "Resortimmobilien", "Private Insel- und Destinationseigentuemmer", "Anlageresidenzen"],
-      marketing: ["Projektpraesentation", "Positionierung und Listung von Einheiten", "Gewinnung von Kaeufer- und Investorenkontakten", "Inhalte und visuelle Praesentation fuer Luxusimmobilien", "Unterstuetzung von Entwicklungskampagnen", "Bearbeitung privater Beratungsanfragen", "Internationale Kundenkommunikation"],
-      platform: ["Listung fuer Vermietungsmanagement", "Listung zum Verkauf", "Private Beratungsanfragen", "Concierge- und Mietanfragen", "Kommunikation mit Eigentuemer und Kunden", "Statusverfolgung", "Rendite- und Belegungsindikatoren", "Premium-Bildergalerien", "Anzeige von Waehrungs- und Zahlungswuenschen", "Vom Admin verwaltete Aktualisierungen"],
-      website: ["Kuratierte Luxusresidenzen", "Erweiterte Suche nach Zielort, Lebensstil und Privatsphaere", "Kollektionen mit Villen am Wasser, Penthouses und Anlageresidenzen", "Formulare fuer private Beratung", "Concierge-Formulare fuer Besichtigungen und Reservierungen", "Immobilienvergleich", "Waehrungsoptionen", "Eigentuemer- und Einheitenverwaltung", "Adminpruefung von Anfragen", "Bildergalerien und detaillierte Einheitenseiten", "Kontakt per WhatsApp Business, privater E-Mail und Premium-Anruf"],
+      eyebrow: "Warum Hurghada?", title: "Das ultimative Ziel für Immobilieninvestitionen und Leben am Meer",
+      introLabel: "Der führende Immobilienstandort am Roten Meer", introTitle: "Ein globaler Rückzugsort, geschaffen rund um das Meer.",
+      intro: ["Entlang von 40 Kilometern unberührter Küste hat sich Hurghada von einem ruhigen Ferienort zu einer kosmopolitischen Stadt und einem Zentrum für Immobilieninvestitionen entwickelt.", "Mit 365 Sonnentagen, kristallklarem Wasser und erstklassiger Infrastruktur ist Hurghada heute ein globaler Rückzugsort für Expats, Ruheständler, digitale Nomaden und renditeorientierte Investoren."],
+      bridge: "Ob sonniger Zweitwohnsitz, dauerhafte Relokationsimmobilie oder leistungsstarkes Mietobjekt—hier erfahren Sie, warum ein Kauf in Hurghada heute eine kluge Entscheidung ist.",
+      stats: [["40 KM", "Unberührte Küste"], ["365", "Sonnentage"], ["12 MONATE", "Aktive Mietnachfrage"], ["GLOBAL", "Flugverbindungen"]],
+      sections: [
+        { number: "01", label: "Renditestarke Investition", title: "Außergewöhnliche Rendite und Mietnachfrage", intro: "Ganzjähriger Tourismus und eine wachsende internationale Expat-Community schaffen eine Dynamik, die traditionelle Mittelmeermärkte übertrifft.", points: [["Kontinuierliche Mieteinnahmen", "Hurghada bleibt zwölf Monate aktiv und ermöglicht hohe Auslastung sowie attraktive Erträge bei Kurzzeit- und Monatsmieten."], ["Schnelle Wertsteigerung", "Immobilien in geplanten Strandgemeinden und gesicherten Anlagen verzeichnen robustes Wachstum und bauen frühzeitig Eigenkapital auf."], ["Starker Währungsvorteil", "USD, EUR und GBP bieten gegenüber lokalen Entwicklungskosten hohe Kaufkraft und attraktive Quadratmeterpreise."]] },
+        { number: "02", label: "Steuerliche und rechtliche Vorteile", title: "Ein sicherer Käufermarkt", intro: "Ägyptens moderner Investitionsrahmen unterstützt ausländisches Eigentum mit einem klaren, sicheren und finanziell attraktiven Transaktionsweg.", points: [["Keine Kapitalertragsteuer", "Beim späteren Wiederverkauf können ausländische Käufer den Wertzuwachs ohne Kapitalertragsteuer auf den Wiederverkaufsgewinn behalten."], ["Geringe laufende Kosten", "Die jährlichen Immobiliensteuern sind im Vergleich zu Europa und der Golfregion außergewöhnlich niedrig."], ["Klare Eigentumsstruktur", "Ausländische Staatsangehörige können geeignete Immobilien im eigenen Namen mit rechtlich bindender Eigentumsdokumentation registrieren."]] },
+        { number: "03", label: "Premium-Lifestyle und niedrige Lebenshaltungskosten", title: "Der ideale Ort für Expats", intro: "Hurghada verbindet die Leichtigkeit einer Küstenriviera mit der Bezahlbarkeit und Alltagstauglichkeit für dauerhaftes Wohnen.", points: [["Überzeugende Lebenshaltungskosten", "Gastronomie, private Beachclubs und Premiumservices bleiben zu einem Bruchteil vergleichbarer europäischer Kosten erreichbar."], ["Moderne Infrastruktur und Medizin", "Internationale Schulen, Privatkliniken auf europäischem Niveau, Einkaufszentren und gesicherte Wohnanlagen unterstützen den Alltag."], ["Globale Anbindung", "Der internationale Flughafen Hurghada bietet ganzjährige Direktverbindungen zu europäischen und nahöstlichen Metropolen."], ["Perfektes Mikroklima", "Warme Winter und trockene Sommer fördern einen gesunden, aktiven Lebensstil am Roten Meer."]] },
+      ],
+      closingLabel: "Finden Sie Ihre perfekte Immobilie in Hurghada", closingTitle: "Ihre Adresse am Roten Meer beginnt hier.", closing: "Vom hochwertigen Studio für digitale Nomaden bis zur großzügigen Strandvilla im exklusiven Compound verbinden wir lokale Expertise mit internationalen Standards.", explore: "Immobilien in Hurghada entdecken", advisor: "Mit lokalem Berater sprechen",
     },
     it: {
-      companyDescription: "Descrizione dell'azienda", companyName: "Nome dell'azienda", servicesTitle: "I nostri servizi",
-      servicesHeadline: "Rappresentanza per immobili di lusso, turismo, progetti e sviluppo.", agencyTitle: "Agenzia per immobili di lusso e turistici",
-      agencyIntro: "Rappresentiamo immobili di lusso e turistici per vendita, affitto e investimento, tra cui:", agencyOutro: "Assistiamo i clienti nella ricerca, nelle visite private, nelle prenotazioni, nelle richieste di acquisto e nelle raccomandazioni di investimento personalizzate.",
-      projectTitle: "Rappresentanza di grandi progetti", projectText1: "Operiamo come agenti e partner di marketing per grandi progetti immobiliari, inclusi complessi residenziali, resort, residenze di marca e progetti misti di fascia alta.",
-      projectText2: "Presentiamo il progetto a clienti qualificati, spieghiamo tipologie e valore d'investimento, gestiamo le richieste e aiutiamo gli sviluppatori a raggiungere acquirenti, investitori e operatori di locazione.",
-      marketingTitle: "Marketing per lo sviluppo immobiliare", marketingIntro: "Forniamo supporto marketing per lo sviluppo immobiliare, tra cui:",
-      platformTitle: "Piattaforma per gestione affitti e vendita", platformText1: "Offriamo una piattaforma affidabile ai proprietari che desiderano affidare a noi la gestione degli affitti o la vendita delle loro unita.",
-      platformText2: "I proprietari possono inviare dettagli, immagini, posizione, prezzo, obiettivo e modalita di gestione. Il nostro team verifica ogni annuncio, lo prepara per la presentazione e lo collega a inquilini, acquirenti o investitori idonei.",
-      platformIntro: "La nostra piattaforma supporta:", websiteTitle: "Servizi del sito", websiteHeadline: "Il sito offre:", contactTitle: "Informazioni di contatto", contactHeadline: "I contatti saranno completati in seguito.", phone: "Telefono / WhatsApp", office: "Indirizzo ufficio", social: "Social media",
-      copy: ["_______________________________ e un'agenzia immobiliare specializzata e una piattaforma di marketing dedicata a immobili di lusso, turistici e d'investimento. Rappresentiamo proprietari, sviluppatori, investitori e clienti alla ricerca di opportunita premium.", "Il nostro lavoro unisce consulenza privata, gestione di affitti di lusso, vendite, rappresentanza di grandi progetti e marketing dello sviluppo. Le unita esclusive vengono presentate professionalmente e abbinate a clienti qualificati con un processo discreto.", "Operiamo come agenti per ville di lusso, attici, residenze turistiche, tenute private, sviluppi di marca e grandi progetti. Colleghiamo gli immobili premium al pubblico giusto attraverso presentazione curata, gestione accurata, comunicazione privata e marketing strategico."],
-      agency: ["Ville private", "Residenze fronte mare", "Attici", "Unita per affitti turistici", "Proprieta in resort", "Proprieta su isole private e destinazioni esclusive", "Residenze da investimento"],
-      marketing: ["Presentazione del progetto", "Posizionamento e pubblicazione delle unita", "Generazione di contatti di acquirenti e investitori", "Contenuti e presentazione visiva di lusso", "Supporto alle campagne di sviluppo", "Gestione delle richieste di consulenza privata", "Comunicazione con clienti internazionali"],
-      platform: ["Pubblicazione per gestione affitti", "Pubblicazione per vendita", "Richieste di consulenza privata", "Richieste concierge e affitto", "Comunicazione con proprietari e clienti", "Monitoraggio dello stato", "Indicatori di rendimento e occupazione", "Gallerie di immagini premium", "Preferenze di valuta e pagamento", "Aggiornamenti gestiti dall'amministratore"],
-      website: ["Annunci curati di residenze di lusso", "Ricerca avanzata per destinazione, stile di vita e privacy", "Collezioni di ville sul mare, attici e residenze da investimento", "Moduli per consulenza privata", "Moduli concierge per visite e prenotazioni", "Strumenti di confronto", "Opzioni di valuta", "Funzioni per proprietari e gestione unita", "Revisione amministrativa delle richieste", "Gallerie e pagine dettagliate", "Contatto tramite WhatsApp Business, email privata e chiamata premium"],
+      eyebrow: "Perché Hurghada?", title: "La destinazione ideale per investimenti immobiliari e vita sulla costa",
+      introLabel: "Il polo immobiliare più importante del Mar Rosso", introTitle: "Un rifugio globale costruito intorno al mare.",
+      intro: ["Lungo 40 chilometri di costa incontaminata, Hurghada si è trasformata da tranquilla località turistica in una città cosmopolita e in un centro di investimento immobiliare.", "Con 365 giorni di sole, acque cristalline e infrastrutture di livello internazionale, Hurghada è un rifugio globale per expat, pensionati, nomadi digitali e investitori ad alto rendimento."],
+      bridge: "Che tu stia cercando una seconda casa al sole, una proprietà per il trasferimento permanente o un immobile da reddito, ecco perché acquistare a Hurghada è una scelta intelligente.",
+      stats: [["40 KM", "Costa incontaminata"], ["365", "Giorni di sole"], ["12 MESI", "Domanda locativa attiva"], ["GLOBALE", "Collegamenti aerei"]],
+      sections: [
+        { number: "01", label: "Investimento ad alto rendimento", title: "ROI eccezionale e domanda locativa", intro: "Turismo tutto l'anno e una comunità internazionale in crescita creano dinamiche superiori ai tradizionali mercati mediterranei.", points: [["Ricavi locativi continui", "Hurghada accoglie turismo per dodici mesi, sostenendo alta occupazione e rendimenti premium negli affitti brevi e mensili."], ["Rapida rivalutazione", "Le proprietà nelle comunità pianificate sul mare e nei compound recintati continuano a crescere di valore."], ["Forte vantaggio valutario", "USD, EUR e GBP offrono agli investitori internazionali grande potere d'acquisto e prezzi al metro quadro competitivi."]] },
+        { number: "02", label: "Vantaggi fiscali e legali", title: "Un mercato sicuro per l'acquirente", intro: "Il quadro moderno degli investimenti in Egitto supporta la proprietà straniera con un percorso chiaro, sicuro e finanziariamente favorevole.", points: [["Nessuna imposta sulle plusvalenze", "Alla rivendita, gli acquirenti stranieri possono conservare l'intero apprezzamento senza imposta sulla plusvalenza immobiliare."], ["Costi di mantenimento minimi", "Le imposte immobiliari annuali sono molto basse rispetto all'Europa e al Golfo, massimizzando il reddito netto."], ["Proprietà straniera lineare", "I cittadini stranieri possono registrare immobili idonei a proprio nome con documentazione legale chiara e vincolante."]] },
+        { number: "03", label: "Lifestyle premium e costo della vita contenuto", title: "Il rifugio degli expat", intro: "Hurghada unisce il fascino di una riviera alla convenienza e alla praticità necessarie per vivere stabilmente.", points: [["Costo della vita imbattibile", "Ristorazione, beach club privati e servizi premium restano accessibili a una frazione dei costi europei."], ["Infrastrutture e sanità avanzate", "Scuole internazionali, ospedali privati di standard europeo, centri commerciali e comunità protette supportano la vita quotidiana."], ["Connettività globale", "L'aeroporto internazionale offre voli diretti tutto l'anno verso le principali capitali europee e mediorientali."], ["Microclima perfetto", "Inverni caldi ed estati a bassa umidità favoriscono uno stile di vita sano e all'aperto sul Mar Rosso."]] },
+      ],
+      closingLabel: "Trova la tua proprietà perfetta a Hurghada", closingTitle: "Il tuo indirizzo sul Mar Rosso inizia qui.", closing: "Dagli studi di fascia alta per nomadi digitali alle grandi ville fronte mare in compound esclusivi, uniamo esperienza locale e standard internazionali.", explore: "Esplora le proprietà a Hurghada", advisor: "Parla con un consulente locale",
     },
   }[language];
 
   return (
     <main className="page-shell about-page">
-      <section className="about-hero section">
-        <p className="eyebrow">{content.companyDescription}</p>
-        <h1>{content.companyName}: _______________________________</h1>
-        <div className="about-copy">
-          {content.copy.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+      <section className="about-destination-hero">
+        <div className="about-destination-hero-copy">
+          <p className="eyebrow">{content.eyebrow}</p>
+          <h1>{content.title}</h1>
+          <a className="about-scroll-cue" href="#hurghada-story"><Icon name="compass" />{content.introLabel}</a>
         </div>
       </section>
 
-      <section className="section about-services">
-        <div className="section-heading">
-          <p className="eyebrow">{content.servicesTitle}</p>
-          <h2>{content.servicesHeadline}</h2>
+      <section className="section about-destination-intro" id="hurghada-story">
+        <header>
+          <p className="eyebrow">{content.introLabel}</p>
+          <h2>{content.introTitle}</h2>
+        </header>
+        <div className="about-destination-copy">
+          {content.intro.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+          <strong>{content.bridge}</strong>
         </div>
-        <article className="about-card">
-          <h3>{content.agencyTitle}</h3><p>{content.agencyIntro}</p>
-          <ul>{content.agency.map((item) => <li key={item}>{item}</li>)}</ul><p>{content.agencyOutro}</p>
-        </article>
-        <article className="about-card">
-          <h3>{content.projectTitle}</h3><p>{content.projectText1}</p><p>{content.projectText2}</p>
-        </article>
-        <article className="about-card">
-          <h3>{content.marketingTitle}</h3><p>{content.marketingIntro}</p>
-          <ul>{content.marketing.map((item) => <li key={item}>{item}</li>)}</ul>
-        </article>
-        <article className="about-card">
-          <h3>{content.platformTitle}</h3><p>{content.platformText1}</p><p>{content.platformText2}</p><p>{content.platformIntro}</p>
-          <ul>{content.platform.map((item) => <li key={item}>{item}</li>)}</ul>
-        </article>
       </section>
 
-      <section className="section about-website">
-        <div className="section-heading">
-          <p className="eyebrow">{content.websiteTitle}</p><h2>{content.websiteHeadline}</h2>
-        </div>
-        <ul className="about-feature-list">{content.website.map((item) => <li key={item}>{item}</li>)}</ul>
+      <section className="about-proof-strip" aria-label={content.introLabel}>
+        {content.stats.map(([value, label]) => <div key={label}><strong>{value}</strong><span>{label}</span></div>)}
       </section>
 
-      <section className="section about-contact" id="contact-info">
-        <div className="section-heading">
-          <p className="eyebrow">{content.contactTitle}</p><h2>{content.contactHeadline}</h2>
+      <div className="about-investment-story">
+        {content.sections.map((section, index) => (
+          <section className={`section about-investment-section tone-${index + 1}`} key={section.number}>
+            <header className="about-investment-heading">
+              <span>{section.number}</span>
+              <div><p className="eyebrow">{section.label}</p><h2>{section.title}</h2><p>{section.intro}</p></div>
+            </header>
+            <div className="about-benefit-grid">
+              {section.points.map(([title, description], pointIndex) => (
+                <article className="about-benefit-card" key={title}>
+                  <span>0{pointIndex + 1}</span><Icon name={index === 0 ? "wallet" : index === 1 ? "shield" : "spark"} />
+                  <h3>{title}</h3><p>{description}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+
+      <section className="section about-property-cta" id="contact-info">
+        <div><p className="eyebrow">{content.closingLabel}</p><h2>{content.closingTitle}</h2><p>{content.closing}</p></div>
+        <div className="about-property-actions">
+          <button type="button" onClick={() => onNavigate("residences")}><Icon name="building" />{content.explore}</button>
+          <button type="button" onClick={() => onAdvisor({ source: "hurghada-destination" })}><Icon name="message" />{content.advisor}</button>
         </div>
-        <dl>
-          <div><dt>{content.companyName}</dt><dd>_______________________________</dd></div>
-          <div><dt>{content.phone}</dt><dd>_______________________________</dd></div>
-          <div><dt>Email</dt><dd>_______________________________</dd></div>
-          <div><dt>Website</dt><dd>_______________________________</dd></div>
-          <div><dt>{content.office}</dt><dd>_______________________________</dd></div>
-          <div><dt>{content.social}</dt><dd>_______________________________</dd></div>
-        </dl>
       </section>
     </main>
   );
 }
 
 function AdminPage({
+  user,
   properties,
   setProperties,
   settings,
   setSettings,
   onConfirmRequest,
 }: {
+  user: Profile;
   properties: Property[];
   setProperties: (properties: Property[]) => void;
   settings: SiteSettings;
   setSettings: (settings: SiteSettings) => void;
-  onConfirmRequest: (label: string) => Promise<boolean>;
+  onConfirmRequest: ConfirmAction;
 }) {
   const { t } = useLanguage();
   const [settingsMessage, setSettingsMessage] = useState("");
-  const [settingsUnlocked, setSettingsUnlocked] = useState(false);
   const [requests, setRequests] = useState<ManagedRequest[]>([]);
+  const [inboxMessage, setInboxMessage] = useState("");
+  const [section, setSection] = useState<"overview" | "listings" | "inbox" | "settings">("overview");
+  const [listingSearch, setListingSearch] = useState("");
 
   const refreshRequests = async () => {
     const nextRequests = await getManagedRequests();
@@ -2799,9 +2953,12 @@ function AdminPage({
   };
 
   useEffect(() => {
-    if (!isAdmin()) go("/auth");
     refreshRequests();
   }, []);
+
+  const visibleProperties = properties.filter((item) =>
+    `${item.name} ${item.location} ${item.destination}`.toLowerCase().includes(listingSearch.toLowerCase())
+  );
 
   async function createUnit() {
     const base = defaultProperties[0];
@@ -2823,34 +2980,53 @@ function AdminPage({
 
   async function changeRequestStatus(request: ManagedRequest, status: string) {
     if ((request.status || "new") === status) return;
-    if (!(await onConfirmRequest(`status change to ${status}`))) return;
+    if (!(await onConfirmRequest({ eyebrow: t("confirmAction"), title: `${t("status")}: ${status}`, description: t("statusConfirmation"), confirmLabel: t("confirmUpdate"), icon: "refresh" }))) return;
     const updated = await updateManagedRequestStatus(request, status);
     setRequests((current) => current.map((item) => (item.id === request.id ? { ...item, ...updated } : item)));
   }
 
   async function removeRequest(request: ManagedRequest) {
-    if (!window.confirm("Delete this request from the admin inbox?")) return;
-    await deleteManagedRequest(request);
-    setRequests((current) => current.filter((item) => item.id !== request.id));
+    if (!(await onConfirmRequest({ eyebrow: t("confirmAction"), title: t("delete"), description: t("deleteRequestConfirmation"), confirmLabel: t("confirmDelete"), tone: "danger", icon: "trash" }))) return;
+    try {
+      await deleteManagedRequest(request);
+      setRequests((current) => current.filter((item) => item.id !== request.id));
+      setInboxMessage("");
+    } catch (error) {
+      setInboxMessage(error instanceof Error ? error.message : t("unitSaveError"));
+    }
   }
 
   return (
     <main className="page-shell admin-page">
-      <section className="section">
-        <div className="section-heading"><h1>{settings.brandName} {t("controlRoom")}</h1></div>
+      <section className="section admin-hero">
+        <div className="admin-hero-copy">
+          <p className="eyebrow"><Icon name="lock" /> {t("admin")}</p>
+          <h1>{settings.brandName} {t("controlRoom")}</h1>
+          <p>{user.name} · {user.email}</p>
+        </div>
+        <button className="admin-primary-action" type="button" onClick={createUnit}><Icon name="plus" />{t("addNewUnit")}</button>
         <div className="vault-dashboard admin-metrics">
           <div className="metric"><span><Icon name="building" />{t("totalListings")}</span><strong>{properties.length}</strong></div>
           <div className="metric"><span><Icon name="wallet" />{t("poaAssets")}</span><strong>{properties.filter((item) => item.priceLabel === "POA").length}</strong></div>
           <div className="metric"><span><Icon name="message" />{t("newRequests")}</span><strong>{requests.filter((item) => item.status === "new").length}</strong></div>
           <div className="metric"><span><Icon name="inbox" />{t("inbox")}</span><strong>{requests.length}</strong></div>
         </div>
+        <nav className="admin-section-nav" aria-label={t("admin")}>
+          {(["overview", "listings", "inbox", "settings"] as const).map((item) => (
+            <button className={section === item ? "active" : ""} type="button" key={item} onClick={() => setSection(item)}>
+              <Icon name={item === "overview" ? "eye" : item === "listings" ? "building" : item === "inbox" ? "inbox" : "settings"} />
+              {item === "overview" ? t("controlRoom") : item === "listings" ? t("totalListings") : item === "inbox" ? t("inbox") : t("saveSiteSettings")}
+              {item === "inbox" && requests.filter((request) => (request.status || "new") === "new").length > 0 && <span>{requests.filter((request) => (request.status || "new") === "new").length}</span>}
+            </button>
+          ))}
+        </nav>
       </section>
-      <section className="section admin-grid admin-units-first">
+      {(section === "overview" || section === "listings") && <section className="section admin-grid admin-units-first">
         <div className="admin-listing-toolbar">
-          <div />
+          <label className="admin-search"><Icon name="search" /><input value={listingSearch} onChange={(event) => setListingSearch(event.target.value)} placeholder={`${t("totalListings")}...`} /></label>
           <button type="button" onClick={createUnit}><Icon name="plus" />{t("addNewUnit")}</button>
         </div>
-        {properties.map((item) => (
+        {visibleProperties.map((item) => (
           <article className="admin-listing" key={item.slug}>
             <img src={item.image} alt={item.name} />
             <div><span>{item.location}</span><h3>{item.name}</h3><p>{item.specs}</p></div>
@@ -2859,21 +3035,9 @@ function AdminPage({
             <button type="button" onClick={() => go(`/detail/${item.slug}`)}><Icon name="external" />{t("open")}</button>
           </article>
         ))}
-      </section>
-      <section className="section admin-control-section">
+      </section>}
+      {section === "settings" && <section className="section admin-control-section">
         <div className="admin-panel">
-          {!settingsUnlocked ? (
-            <form className="admin-unlock" onSubmit={(event) => {
-              event.preventDefault();
-              const pass = String(new FormData(event.currentTarget).get("password"));
-              setSettingsUnlocked(pass === "Admin123456");
-              setSettingsMessage(pass === "Admin123456" ? t("settingsUnlocked") : t("wrongAdminPassword"));
-            }}>
-              <label>{t("adminPassword")}<input name="password" type="password" /></label>
-              <button type="submit"><Icon name="lock" />{t("unlockSettings")}</button>
-              <p className="auth-message">{settingsMessage}</p>
-            </form>
-          ) : (
             <form className="admin-form unlocked" onSubmit={async (event) => {
               event.preventDefault();
               const data = new FormData(event.currentTarget);
@@ -2885,7 +3049,7 @@ function AdminPage({
                 cryptoPayments: String(data.get("cryptoPayments")),
                 pendingRequests: Number(data.get("pendingRequests")) || requests.length,
               };
-              if (!(await onConfirmRequest("site settings save"))) return;
+              if (!(await onConfirmRequest({ eyebrow: t("confirmAction"), title: t("saveSiteSettings"), description: t("saveSettingsConfirmation"), confirmLabel: t("confirmSave"), tone: "save", icon: "save" }))) return;
               setSettings(await saveSiteSettings(next));
               setSettingsMessage(t("siteSettingsSaved"));
             }}>
@@ -2897,14 +3061,14 @@ function AdminPage({
               <button type="submit"><Icon name="save" />{t("saveSiteSettings")}</button>
               <p className="auth-message">{settingsMessage}</p>
             </form>
-          )}
         </div>
-      </section>
-      <section className="section admin-panel admin-inbox">
+      </section>}
+      {(section === "overview" || section === "inbox") && <section className="section admin-panel admin-inbox">
         <div className="section-heading admin-inbox-toolbar">
           <button type="button" onClick={refreshRequests}><Icon name="refresh" />{t("refreshInbox")}</button>
         </div>
         <div className="admin-request-grid">
+          {inboxMessage && <p className="auth-message error">{inboxMessage}</p>}
           {requests.length === 0 && <p className="auth-message">{t("noRequestsFound")}</p>}
           {requests.map((request) => (
             <article className="admin-request-card" key={`${request.collection}-${request.id}`}>
@@ -2936,7 +3100,7 @@ function AdminPage({
             </article>
           ))}
         </div>
-      </section>
+      </section>}
     </main>
   );
 }
@@ -2950,7 +3114,7 @@ function UnitManagementPage({
   properties: Property[];
   setProperties: (properties: Property[]) => void;
   id: string;
-  onConfirmRequest: (label: string) => Promise<boolean>;
+  onConfirmRequest: ConfirmAction;
 }) {
   const { t } = useLanguage();
   const [message, setMessage] = useState("");
@@ -2971,10 +3135,6 @@ function UnitManagementPage({
       .trim()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)/g, "");
-
-  useEffect(() => {
-    if (!isAdmin()) go("/auth");
-  }, []);
 
   useEffect(() => {
     setMainImage(property.image);
@@ -3018,7 +3178,7 @@ function UnitManagementPage({
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
-    if (!(await onConfirmRequest("unit changes save"))) return;
+    if (!(await onConfirmRequest({ eyebrow: t("confirmAction"), title: t("saveUnit"), description: t("saveUnitConfirmation"), confirmLabel: t("confirmSave"), tone: "save", icon: "save" }))) return;
     try {
       setMessage(t("savingUnit"));
       const next = readProperty(data);
@@ -3046,14 +3206,14 @@ function UnitManagementPage({
   }
 
   async function removeUnit() {
-    if (!(await onConfirmRequest(`remove ${property.name}`))) return;
+    if (!(await onConfirmRequest({ eyebrow: t("confirmAction"), title: `${t("removeUnit")}: ${property.name}`, description: t("deleteUnitConfirmation"), confirmLabel: t("confirmDelete"), tone: "danger", icon: "trash" }))) return;
     const nextProperties = await deleteProperty(property.slug);
     setProperties(nextProperties);
     go("/admin");
   }
 
   async function resetDefaults() {
-    if (!(await onConfirmRequest("restore default units"))) return;
+    if (!(await onConfirmRequest({ eyebrow: t("confirmAction"), title: t("seedDefaults"), description: t("restoreDefaultsConfirmation"), confirmLabel: t("confirmUpdate"), icon: "refresh" }))) return;
     const nextProperties = await seedDefaults();
     setProperties(nextProperties);
     go("/admin");
@@ -3117,11 +3277,28 @@ function UnitManagementPage({
   );
 }
 
+function AdminAccessPage({ ready, user }: { ready: boolean; user: Profile | null }) {
+  const { t } = useLanguage();
+  return (
+    <main className="page-shell admin-access-page">
+      <section className="admin-access-card">
+        <span className="admin-access-icon"><Icon name={ready ? "lock" : "refresh"} /></span>
+        <p className="eyebrow">{t("admin")}</p>
+        <h1>{ready ? t("confirmAccess") : t("signingIn")}</h1>
+        <p>{t("privateAccessSteps")}</p>
+        {ready && !user && <a href="#/auth"><Icon name="lock" />{t("signIn")}</a>}
+        {ready && user && <a href="#/profile"><Icon name="user" />{t("profile")}</a>}
+      </section>
+    </main>
+  );
+}
+
 export default function App() {
   const [language, setLanguageState] = useState<Language>(() => getInitialLanguage());
   const [currentRoute, setCurrentRoute] = useState(route());
   const [transitioning, setTransitioning] = useState(false);
   const [user, setUser] = useState<Profile | null>(null);
+  const [authReady, setAuthReady] = useState(false);
   const [properties, setProperties] = useState<Property[]>(defaultProperties);
   const [settings, setSettings] = useState<SiteSettings>(() => getCachedSiteSettings());
   const [advisorOpen, setAdvisorOpen] = useState(false);
@@ -3140,9 +3317,9 @@ export default function App() {
     go("/about/contact");
   };
 
-  const confirmRequestSend = (label: string) =>
+  const confirmRequestSend: ConfirmAction = (options) =>
     new Promise<boolean>((resolve) => {
-      setConfirmationRequest({ label, resolve });
+      setConfirmationRequest({ ...options, resolve });
     });
 
   const resolveConfirmation = (confirmed: boolean) => {
@@ -3169,7 +3346,7 @@ export default function App() {
       }, 180);
     };
     window.addEventListener("hashchange", onHash);
-    waitForAuth().then(setUser);
+    waitForAuth().then(setUser).finally(() => setAuthReady(true));
     getProperties().then(setProperties);
     getSiteSettings().then(setSettings);
     return () => {
@@ -3187,28 +3364,31 @@ export default function App() {
     currentRoute.page === "auth" ? (
       <AuthPage onUser={setUser} />
     ) : currentRoute.page === "about" ? (
-      <AboutPage id={currentRoute.id} />
+      <AboutPage id={currentRoute.id} onNavigate={navigateSection} onAdvisor={openAdvisor} />
     ) : currentRoute.page === "explore-map" ? (
       <ExploreMapPage user={user} routeQuery={currentRoute.query} onConfirmRequest={confirmRequestSend} />
     ) : currentRoute.page === "detail" ? (
       <DetailPage user={user} properties={properties} id={currentRoute.id} />
     ) : currentRoute.page === "profile" ? (
       <ProfilePage user={user} onUser={setUser} />
-    ) : currentRoute.page === "admin-unit" ? (
+    ) : currentRoute.page === "admin-unit" && authReady && isAdmin(user) ? (
       <UnitManagementPage
         properties={properties}
         setProperties={setProperties}
         id={currentRoute.id}
         onConfirmRequest={confirmRequestSend}
       />
-    ) : currentRoute.page === "admin" ? (
+    ) : currentRoute.page === "admin" && authReady && isAdmin(user) ? (
       <AdminPage
+        user={user!}
         properties={properties}
         setProperties={setProperties}
         settings={settings}
         setSettings={setSettings}
         onConfirmRequest={confirmRequestSend}
       />
+    ) : currentRoute.page === "admin" || currentRoute.page === "admin-unit" ? (
+      <AdminAccessPage ready={authReady} user={user} />
     ) : (
       <HomePage
         user={user}
@@ -3223,11 +3403,11 @@ export default function App() {
 
   return (
     <LanguageContext.Provider value={languageContext}>
-      <Header user={user} settings={settings} onNavigate={navigateSection} onContact={openContactPage} />
+      <Header user={user} settings={settings} activePage={currentRoute.page} onNavigate={navigateSection} onContact={openContactPage} />
       <div className={`page-transition ${transitioning ? "leaving" : "entered"}`} key={`${currentRoute.page}-${currentRoute.id}-${currentRoute.query}`}>
         {content}
       </div>
-      <GlobalFooter settings={settings} onNavigate={navigateSection} onAdvisor={openAdvisor} />
+      <GlobalFooter settings={settings} onNavigate={navigateSection} />
       <AdvisorDrawer
         open={advisorOpen}
         context={advisorContext}

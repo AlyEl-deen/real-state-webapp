@@ -33,7 +33,6 @@ const firebaseConfig = {
   messagingSenderId: "739106929711",
   appId: "1:739106929711:web:b3f3d7c2695eaff5d9dada",
   measurementId: "G-PJSG6NWSGH",
-  adminEmail: "admin@auravilla.local",
 };
 
 const app = initializeApp(firebaseConfig);
@@ -91,7 +90,23 @@ const profileFromUser = (user: User, extra?: Partial<Profile>): Profile => ({
   intent: extra?.intent || "",
   photoURL: user.photoURL || extra?.photoURL || "",
   emailVerified: user.emailVerified || Boolean(extra?.emailVerified),
+  isAdmin: extra?.isAdmin === true,
 });
+
+const profileFromAccount = async (user: User): Promise<Profile> => {
+  try {
+    const snapshot = await withFirestoreTimeout(getDoc(doc(db, "users", user.uid)));
+    const account = snapshot.exists() ? snapshot.data() : {};
+    return profileFromUser(user, {
+      name: typeof account.name === "string" ? account.name : undefined,
+      intent: typeof account.intent === "string" ? account.intent : undefined,
+      photoURL: typeof account.photoURL === "string" ? account.photoURL : undefined,
+      isAdmin: account.isAdmin === true,
+    });
+  } catch {
+    return profileFromUser(user);
+  }
+};
 
 export const getLocalSession = () => readJson<Profile | null>("auraUserSession", null);
 
@@ -102,13 +117,14 @@ export const setLocalSession = (profile: Profile | null) => {
 
 export const waitForAuth = () =>
   new Promise<Profile | null>((resolve) => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       unsubscribe();
       if (!user) {
-        resolve(getLocalSession());
+        setLocalSession(null);
+        resolve(null);
         return;
       }
-      const profile = profileFromUser(user);
+      const profile = await profileFromAccount(user);
       setLocalSession(profile);
       resolve(profile);
     });
@@ -127,29 +143,20 @@ const authMessage = (error: unknown) => {
     "auth/unauthorized-continue-uri":
       "Firebase could not send the verification email because this site URL is not authorized in Firebase Authentication settings.",
   };
+  if (code.includes("requests-to-this-api") || message.includes("requests-to-this-api")) {
+    return "Firebase sign-in was blocked by the configured API key. The site configuration has been repaired; refresh the page and try again.";
+  }
   return messages[code] || message || "Firebase Authentication failed.";
 };
 
 export async function signIn(login: string, password: string) {
-  if (login === "admin" && password === "Admin123456") {
-    try {
-      const credential = await signInWithEmailAndPassword(auth, firebaseConfig.adminEmail, password);
-      const profile = profileFromUser(credential.user, { name: "Admin", emailVerified: true });
-      setLocalSession(profile);
-    } catch (error) {
-      throw new Error(`Firebase admin sign-in failed for ${firebaseConfig.adminEmail}: ${authMessage(error)}`);
-    }
-    localStorage.setItem("auraAdminSession", "true");
-    return { role: "admin" as const };
-  }
-
   try {
     const credential = await signInWithEmailAndPassword(auth, login, password);
     await credential.user.reload();
-    const profile = profileFromUser(credential.user);
+    const profile = await profileFromAccount(credential.user);
     setLocalSession(profile);
     if (!credential.user.emailVerified) return { role: "verify" as const, email: credential.user.email || login };
-    return { role: "user" as const };
+    return { role: profile.isAdmin ? "admin" as const : "user" as const };
   } catch (error) {
     throw new Error(authMessage(error));
   }
@@ -184,6 +191,7 @@ export async function signUp(profile: { name: string; email: string; password: s
     intent: profile.intent,
     photoURL: "",
     emailVerified: false,
+    isAdmin: false,
   });
   return { requiresVerification: true, email: profile.email, verificationSent, verificationError };
 }
@@ -196,7 +204,6 @@ export async function sendCurrentUserVerificationEmail() {
 
 export async function logout() {
   await signOut(auth);
-  localStorage.removeItem("auraAdminSession");
   setLocalSession(null);
 }
 
@@ -218,8 +225,8 @@ export async function saveProperty(property: Property) {
 }
 
 export async function uploadPropertyImage(file: File, propertySlug: string) {
-  if (!auth.currentUser || !isAdmin()) {
-    throw new Error(`Sign in as ${firebaseConfig.adminEmail} before uploading unit images.`);
+  if (!auth.currentUser || !isAdmin(getLocalSession())) {
+    throw new Error("An isAdmin account is required before uploading unit images.");
   }
   if (!file.type.startsWith("image/")) throw new Error("Only image files can be uploaded for unit galleries.");
 
@@ -238,8 +245,8 @@ export async function uploadPropertyImage(file: File, propertySlug: string) {
 
 export async function deleteProperty(slug: string) {
   const properties = (await getProperties()).filter((item) => item.slug !== slug);
+  await withFirestoreTimeout(deleteDoc(doc(db, "properties", slug)));
   writeJson("auraProperties", properties);
-  await tryFirestoreWrite(deleteDoc(doc(db, "properties", slug)));
   return properties;
 }
 
@@ -369,8 +376,35 @@ export async function updateManagedRequestStatus(request: ManagedRequest, status
 
 export async function deleteManagedRequest(request: ManagedRequest) {
   if (!request.id.startsWith("local-")) {
-    await tryFirestoreWrite(deleteDoc(doc(db, request.collection, request.id)));
+    await withFirestoreTimeout(deleteDoc(doc(db, request.collection, request.id)));
   }
+
+  const cacheKey = request.collection === "advisorRequests" ? "auraAdvisorRequests" : "auraRentalRequests";
+  const cached = readJson<(AdvisorRequest | RentalRequest)[]>(cacheKey, []);
+  const filtered = cached.filter((item, index) => {
+    const localId = request.collection === "advisorRequests"
+      ? ("id" in item && item.id) || `local-advisor-${index + 1}`
+      : `local-rental-${index + 1}`;
+    const sameCreatedAt = Boolean(request.createdAt && item.createdAt === request.createdAt);
+    const sameContact = (item.email || "") === (request.email || request.userEmail || "");
+    return localId !== request.id && !(sameCreatedAt && sameContact);
+  });
+  writeJson(cacheKey, filtered);
+}
+
+export async function uploadProfileImage(file: File) {
+  if (!auth.currentUser) throw new Error("Sign in before uploading a profile image.");
+  if (!file.type.startsWith("image/")) throw new Error("Choose a valid image file.");
+  if (file.size > 5 * 1024 * 1024) throw new Error("Profile images must be smaller than 5 MB.");
+
+  const extension = file.name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+  const imageRef = ref(storage, `profile-images/${auth.currentUser.uid}/avatar-${Date.now()}.${extension}`);
+  const snapshot = await uploadBytes(imageRef, file, {
+    contentType: file.type,
+    cacheControl: "public,max-age=31536000,immutable",
+    customMetadata: { ownerId: auth.currentUser.uid },
+  });
+  return getDownloadURL(snapshot.ref);
 }
 
 export async function updateProfileData(profile: Pick<Profile, "name" | "intent" | "photoURL">) {
@@ -390,13 +424,12 @@ export async function updateProfileData(profile: Pick<Profile, "name" | "intent"
       { merge: true }
     )
   );
-  const updated = profileFromUser(auth.currentUser, profile);
+  const updated = profileFromUser(auth.currentUser, { ...profile, isAdmin: getLocalSession()?.isAdmin === true });
   setLocalSession(updated);
   return updated;
 }
 
 export const hasPrivateAccess = (profile: Profile | null) =>
-  localStorage.getItem("auraAdminSession") === "true" || Boolean(profile?.emailVerified);
+  Boolean(profile?.emailVerified);
 
-export const isAdmin = () =>
-  localStorage.getItem("auraAdminSession") === "true" && auth.currentUser?.email === firebaseConfig.adminEmail;
+export const isAdmin = (profile: Profile | null | undefined) => profile?.isAdmin === true;

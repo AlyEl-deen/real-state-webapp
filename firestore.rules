@@ -6,35 +6,123 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Admin authority is read from an existing account document. Client code
+    // cannot create or change this field on its own account.
     function isAdmin() {
-      return signedIn() && request.auth.token.email == "admin@auravilla.local";
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+
+    function validText(value, maximum) {
+      return value is string && value.size() <= maximum;
+    }
+
+    function validProperty() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['slug', 'name', 'location', 'destination', 'image', 'priceUsd', 'priceLabel'])
+        && validText(data.slug, 160)
+        && validText(data.name, 200)
+        && validText(data.location, 240)
+        && validText(data.destination, 120)
+        && validText(data.image, 2000)
+        && data.priceUsd is number
+        && data.priceUsd >= 0
+        && validText(data.priceLabel, 80);
+    }
+
+    function validSettings() {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['brandName', 'whatsappUrl', 'defaultCurrency', 'cryptoPayments', 'pendingRequests'])
+        && validText(data.brandName, 120)
+        && validText(data.whatsappUrl, 1000)
+        && data.defaultCurrency in ['USD', 'EUR', 'AED', 'GBP']
+        && validText(data.cryptoPayments, 500)
+        && data.pendingRequests is int
+        && data.pendingRequests >= 0;
+    }
+
+    function validUserCreate(userId) {
+      let data = request.resource.data;
+      return request.auth.uid == userId
+        && data.keys().hasOnly(['name', 'email', 'intent', 'photoURL', 'verified', 'role', 'createdAt'])
+        && validText(data.name, 160)
+        && validText(data.email, 320)
+        && data.email == request.auth.token.email
+        && validText(data.intent, 500)
+        && validText(data.photoURL, 2000)
+        && data.verified is bool
+        && data.role == 'client'
+        && validText(data.createdAt, 64);
+    }
+
+    function validSelfProfileUpdate(userId) {
+      let data = request.resource.data;
+      return request.auth.uid == userId
+        && data.diff(resource.data).affectedKeys().hasOnly(['name', 'intent', 'photoURL', 'verified', 'updatedAt'])
+        && validText(data.name, 160)
+        && validText(data.intent, 500)
+        && validText(data.photoURL, 2000)
+        && data.verified is bool
+        && (!('isAdmin' in resource.data) || data.isAdmin == resource.data.isAdmin)
+        && (!('role' in resource.data) || data.role == resource.data.role);
+    }
+
+    function validRequest() {
+      let data = request.resource.data;
+      return data.keys().hasOnly([
+        'source', 'name', 'email', 'phone', 'request', 'purpose', 'desiredResidence',
+        'budgetRange', 'privacyLevel', 'preferredDate', 'channel', 'preferences',
+        'createdAt', 'updatedAt', 'status', 'userId', 'userEmail', 'firebaseCollection',
+        'searchedArea', 'accommodationType', 'resultCount', 'excludedCommercial', 'geographicArea'
+      ])
+        && (!('source' in data) || validText(data.source, 80))
+        && (!('email' in data) || validText(data.email, 320))
+        && (!('request' in data) || validText(data.request, 5000))
+        && (!('preferences' in data) || validText(data.preferences, 5000))
+        && (!('status' in data) || data.status in ['new', 'reviewing', 'contacted', 'closed']);
     }
 
     match /properties/{propertyId} {
       allow read: if true;
-      allow create, update, delete: if isAdmin();
+      allow create, update: if isAdmin() && validProperty();
+      allow delete: if isAdmin();
     }
 
     match /siteSettings/{documentId} {
       allow read: if true;
-      allow create, update, delete: if isAdmin();
+      allow create, update: if isAdmin() && validSettings();
+      allow delete: if isAdmin();
     }
 
     match /users/{userId} {
-      allow create: if signedIn() && request.auth.uid == userId;
-      allow read, update: if signedIn() && (request.auth.uid == userId || isAdmin());
+      allow create: if signedIn() && validUserCreate(userId);
+      allow read: if signedIn() && (request.auth.uid == userId || isAdmin());
+      allow update: if signedIn() && (isAdmin() || validSelfProfileUpdate(userId));
       allow delete: if isAdmin();
     }
 
     match /rentalRequests/{requestId} {
-      allow create: if signedIn();
+      allow create: if signedIn() && validRequest();
       allow read, update, delete: if isAdmin();
     }
 
     match /advisorRequests/{requestId} {
       allow create: if signedIn()
-        && request.resource.data.userId == request.auth.uid;
+        && request.resource.data.userId == request.auth.uid
+        && validRequest();
       allow read, update, delete: if isAdmin();
+    }
+
+    match /exploreMapLeads/{requestId} {
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && validRequest();
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

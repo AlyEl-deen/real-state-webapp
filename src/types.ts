@@ -39,6 +39,7 @@ export type Profile = {
   intent?: string;
   photoURL?: string;
   emailVerified: boolean;
+  isAdmin: boolean;
 };
 
 export type RentalRequest = {
